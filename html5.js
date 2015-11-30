@@ -2,8 +2,8 @@ function mapInfo()
 {
 	this.widthInTiles = 20;
 	this.heightInTiles = 23;
-	this.tile1Center = new vector2(178,161);
-	this.tileSize = new vector2(68, 78);
+	this.tile1Center = new v2(178,161);
+	this.tileSize = new v2(68, 78);
 }
 
 function vector2(x, y)
@@ -28,7 +28,7 @@ var gold = 0;
 var party = [];
 
 // Player position in tiles
-var playerPosition = new vector2(0, 0);
+var playerTilePosition = new vector2(0, 0);
 var playerDrawOffset = new vector2(-8, -25);
 
 window.onload = loadContent;
@@ -56,6 +56,7 @@ function loadContent()
 
 	canvas = document.getElementById('canvasId');
 	context = canvas.getContext("2d");
+    canvas.addEventListener("mousedown", doMouseDown, true);
 
     imagesToLoad.push(mapFileName);
     imagesToLoad.push(playerFileName);
@@ -88,84 +89,84 @@ function endTurn()
 
 function moveSouth()
 {
-	if(playerPosition.y < map.heightInTiles - 1)
+	if(playerTilePosition.y < map.heightInTiles - 1)
 	{
-		playerPosition.y++;
+		playerTilePosition.y++;
 		endTurn();
 	}
 }
 
 function moveNorth()
 {
-	if(playerPosition.y > 0)
+	if(playerTilePosition.y > 0)
 	{
-		playerPosition.y--;
+		playerTilePosition.y--;
 		endTurn();
 	}
 }
 
 function moveSouthEast()
 {
-	if((playerPosition.x < map.widthInTiles - 1) && (isOnEvenTile() || playerPosition.y < map.heightInTiles - 1))
+	if((playerTilePosition.x < map.widthInTiles - 1) && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
 	{
 		if(!isOnEvenTile())
         {
-			playerPosition.y++;
+			playerTilePosition.y++;
         }
-		playerPosition.x++;
+		playerTilePosition.x++;
 		endTurn();
 	}
 }
 
 function moveSouthWest()
 {
-	if(playerPosition.x > 0 && (isOnEvenTile() || playerPosition.y < map.heightInTiles - 1))
+	if(playerTilePosition.x > 0 && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
 	{
 		if(!isOnEvenTile())
         {
-			playerPosition.y++;
+			playerTilePosition.y++;
         }
-		playerPosition.x--;
+		playerTilePosition.x--;
 		endTurn();
 	}
 }
 
 function moveNorthEast()
 {
-	if((playerPosition.x < map.widthInTiles - 1) && (!isOnEvenTile() || playerPosition.y > 0))
+	if((playerTilePosition.x < map.widthInTiles - 1) && (!isOnEvenTile() || playerTilePosition.y > 0))
 	{
 		if(isOnEvenTile())
         {
-			playerPosition.y--;
+			playerTilePosition.y--;
         }
-		playerPosition.x++;
+		playerTilePosition.x++;
 		endTurn();
 	}
 }
 
 function moveNorthWest()
 {
-	if(playerPosition.x > 0 && (!isOnEvenTile() || playerPosition.y > 0))
+	if(playerTilePosition.x > 0 && (!isOnEvenTile() || playerTilePosition.y > 0))
 	{
 		if(isOnEvenTile())
         {
-			playerPosition.y--;
+			playerTilePosition.y--;
         }
-		playerPosition.x--;
+		playerTilePosition.x--;
 		endTurn();
 	}
 }
 
 function isOnEvenTile()
 {
-	return (playerPosition.x % 2 == 0)
+	return (playerTilePosition.x % 2 == 0)
 }
 
 function draw()
 {
-    var optimalTopLeftMapLocation = new vector2(0, 0);
-	optimalTopLeftMapLocation.x = map.tile1Center.x + (map.tileSize.x * playerPosition.x);
-	optimalTopLeftMapLocation.y = map.tile1Center.y + (map.tileSize.y * playerPosition.y);
+    var optimalTopLeftMapLocation = new v2(0, 0);
+	optimalTopLeftMapLocation.x = map.tile1Center.x + (map.tileSize.x * playerTilePosition.x);
+	optimalTopLeftMapLocation.y = map.tile1Center.y + (map.tileSize.y * playerTilePosition.y);
 	if(!isOnEvenTile())
 	{
 		optimalTopLeftMapLocation.y += 0.5 * map.tileSize.y;	
@@ -173,7 +174,7 @@ function draw()
 	optimalTopLeftMapLocation.x -= 0.5 * canvas.width;
 	optimalTopLeftMapLocation.y -= 0.5 * canvas.height;
     
-    var safeTopLeftMapLocation = new vector2(optimalTopLeftMapLocation.x, optimalTopLeftMapLocation.y);
+    var safeTopLeftMapLocation = new v2(optimalTopLeftMapLocation.x, optimalTopLeftMapLocation.y);
 	if(safeTopLeftMapLocation.x < 0)
 		safeTopLeftMapLocation.x = 0;
 	if(safeTopLeftMapLocation.y < 0)
@@ -184,11 +185,27 @@ function draw()
 		safeTopLeftMapLocation.y = images[mapFileName].height - canvas.height;    
     
 	context.drawImage(images[mapFileName], safeTopLeftMapLocation.x, safeTopLeftMapLocation.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-	
+    
 	var playerImageX = Math.round(0.5*canvas.width - 0.5*images[playerFileName].width + (optimalTopLeftMapLocation.x - safeTopLeftMapLocation.x) + playerDrawOffset.x);
 	var playerImageY = Math.round(0.5*canvas.height - 0.5*images[playerFileName].height + (optimalTopLeftMapLocation.y - safeTopLeftMapLocation.y) + playerDrawOffset.y);
 	context.drawImage(images[playerFileName], playerImageX, playerImageY);
-	
+    
+    var cameraPixelPosition = new v2(0, 0);
+    /*
+    var playerPixelPosition = v2Hadamard(playerTilePosition, map.tileSize);
+    v2SubtractAssign(playerPixelPosition, cameraPixelPosition);
+    v2AddAssign(playerPixelPosition, playerDrawOffset);
+    playerPixelPosition.x -= 0.5*images[playerFileName].width;
+    playerPixelPosition.y -= 0.5*images[playerFileName].height;
+	context.drawImage(images[playerFileName], Math.round(playerPixelPosition.x), Math.round(playerPixelPosition.y));
+	*/
+    
+    /* Todo(ian): What should the coordinate system look like?
+        - 0,0 would be the center of tile 0, 0?
+        - then if you are 5 tiles east you add 5 tile widths.
+        - but we also need to look at wether your tile evenness is equal to the frame tile evenness
+    */
+    
 	document.getElementById('remainingFood').innerHTML = food;
 	document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
 	document.getElementById('gold').innerHTML = gold;
@@ -205,9 +222,178 @@ function draw()
             // 5 - Swamp
             // 6 - Desert
             
+            var center = cameraPixelPosition + (new v2(x, y) * map.tileSize);
+            if(x % 2 == 0)
+            {
+                center.y += 0.5 * map.tileSize.y;
+            }
+            var radius = 10;
+            context.beginPath();
+            context.arc(center.x, center.y, radius, 0, 2 * Math.PI);
+            context.fillStyle = 'green';
+            context.fill();
+            //context.lineWidth = 0;
+            //context.strokeStyle = '#003300';
+            //context.stroke();
         }
     }
 }
+
+//
+// === INPUT ===
+//
+
+function doMouseDown(event)
+{
+    update();
+    draw();
+}
+
+//
+// === MATH ===
+//
+
+function d6()
+{
+	return Math.floor(Math.random()*6) + 1;
+}
+
+function v2(x, y)
+{
+    if(isNaN(x))
+    {
+        x = 0;
+    }
+    if(isNaN(y))
+    {
+        y = 0;
+    }
+    this.x = x;
+    this.y = y;
+}
+
+function v2Multiply(one, scalar)
+{
+    var result = new v2();
+    result.x = one.x * scalar;
+    result.y = one.y * scalar;
+    return result;
+}
+
+function v2MultiplyAssign(v2, scalar)
+{
+    v2.x *= scalar;
+    v2.y *= scalar;
+}
+
+function v2Hadamard(one, two)
+{
+    var result = new v2();
+    result.x = one.x * two.x;
+    result.y = one.y * two.y;
+    return result;
+}
+
+function v2Divide(one, scalar)
+{
+    var result = new v2();
+    result.x = one.x / scalar;
+    result.y = one.y / scalar;
+    return result;
+}
+
+function v2DivideAssign(one, scalar)
+{
+    one.x = one.x / scalar;
+    one.y = one.y / scalar;
+}
+
+function v2Add(one, two)
+{
+    var result = new v2();
+    result.x = one.x + two.x;
+    result.y = one.y + two.y;
+    return result;
+}
+
+function v2AddAssign(one, two)
+{
+    one.x += two.x;
+    one.y += two.y;
+}
+
+function v2Subtract(one, two)
+{
+    var result = new v2();
+    result.x = one.x - two.x;
+    result.y = one.y - two.y;
+    return result;
+}
+
+function v2SubtractAssign(one, two)
+{
+    one.x -= two.x;
+    one.y -= two.y;
+}
+
+function v2Length(a)
+{
+    var result = Math.pow(a.x, 2) + Math.pow(a.y, 2);
+    result = Math.sqrt(result);
+    return result;
+}
+
+function v2Inner(a, b)
+{
+    return Result = a.x*b.x + a.y*b.y;
+}
+
+function v2NormalizeAssign(a)
+{
+    if(a.x != 0 || a.y != 0)
+    {
+        v2DivideAssign(a, v2Length(a));
+    }
+}
+
+function v2Normalize(a)
+{
+    var result = v2Copy(a);
+    if(a.x != 0 || a.y != 0)
+    {
+        result = v2Divide(a, v2Length(a));
+    }
+    return result;
+}
+
+function v2Copy(v)
+{
+    return new v2(v.x, v.y);
+}
+
+function angleToV2(a)
+{
+    return new v2(-Math.cos(a), -Math.sin(a));
+}
+
+//
+// == TABLES
+//
+
+// 0 - Farmland
+// 1 - Countryside
+// 2 - Forset
+// 3 - Hills
+// 4 - Mountains
+// 5 - Swamp
+// 6 - Desert
+
+// 7 - Cross River
+// 8 - On Road
+// 9 - Airborne
+// 10 - Rafting
+var terrain = [
+[1,4,4,2,2,1,1,3,4,3,3,2,1,5,0,0,3,4,4,4]];
 
 // TODO(ian): Does this have an off by one error?
 var wealthTable = [
@@ -265,31 +451,4 @@ function getWealthFromCode(wealthCode)
 	var wealthCodeColumn = d6() - 1;
 	
 	return wealthTable[wealthCodeRow][wealthCodeColumn];
-}
-
-function d6()
-{
-	return Math.floor(Math.random()*6) + 1;
-}
-
-// 0 - Farmland
-// 1 - Countryside
-// 2 - Forset
-// 3 - Hills
-// 4 - Mountains
-// 5 - Swamp
-// 6 - Desert
-
-// 7 - Cross River
-// 8 - On Road
-// 9 - Airborne
-// 10 - Rafting
-var terrain = [
-[1,4,4,2,2,1,1,3,4,3,3,2,1,5,0,0,3,4,4,4]];
-
-canvas.addEventListener("mousedown", doMouseDown, true);
-function doMouseDown(event)
-{
-    update();
-    draw();
 }
