@@ -22,22 +22,40 @@ var mapFileName = "map.jpg";
 var playerFileName = "player.png";
 var moveArrowFileName = "moveArrow.png";
 
-var maxHitPoints = 9;
-var hitPoints = maxHitPoints;
 var food = 5;
 var gold = 0;
+
+var party = [];
 
 // Player position in tiles
 var playerPosition = new vector2(0, 0);
 var playerDrawOffset = new vector2(-8, -25);
 
 window.onload = loadContent;
-	
+
+// Todo(ian): 2 hex movement if mounted.  3 hex flying movement.
+// Todo(ian): click on tile to move, highlight movement options.
+// Todo(ian): sleeping / nighttime animation
+
 function loadContent()
 {
+    party.push({});
+    party[0].name = "Cal Arath";
+    party[0].title = "Barbarian Prince";
+    party[0].weaponName = "Bonebiter";
+    party[0].combatSkill = 8;
+    party[0].maxEndurance = 9;
+    party[0].currentEndurance = 9;
+    party[0].witAndWiles = d6();
+    if(party[0].witAndWiles = 1)
+    {
+        party[0].witAndWiles = 2;
+    }
+    party[0].mounted = false;
+	gold = getWealthFromCode(2);
+
 	canvas = document.getElementById('canvasId');
 	context = canvas.getContext("2d");
-	gold = getWealthFromCode(2);
 
     imagesToLoad.push(mapFileName);
     imagesToLoad.push(playerFileName);
@@ -145,8 +163,26 @@ function isOnEvenTile()
 
 function draw()
 {
-	var optimalTopLeftMapLocation = calculateMapPosition();
-	var safeTopLeftMapLocation = calculateLegalDrawPosition(optimalTopLeftMapLocation);
+    var optimalTopLeftMapLocation = new vector2(0, 0);
+	optimalTopLeftMapLocation.x = map.tile1Center.x + (map.tileSize.x * playerPosition.x);
+	optimalTopLeftMapLocation.y = map.tile1Center.y + (map.tileSize.y * playerPosition.y);
+	if(!isOnEvenTile())
+	{
+		optimalTopLeftMapLocation.y += 0.5 * map.tileSize.y;	
+	}
+	optimalTopLeftMapLocation.x -= 0.5 * canvas.width;
+	optimalTopLeftMapLocation.y -= 0.5 * canvas.height;
+    
+    var safeTopLeftMapLocation = new vector2(optimalTopLeftMapLocation.x, optimalTopLeftMapLocation.y);
+	if(safeTopLeftMapLocation.x < 0)
+		safeTopLeftMapLocation.x = 0;
+	if(safeTopLeftMapLocation.y < 0)
+		safeTopLeftMapLocation.y = 0;
+	if(safeTopLeftMapLocation.x + canvas.width > images[mapFileName].width)
+		safeTopLeftMapLocation.x = images[mapFileName].width - canvas.width;
+	if(safeTopLeftMapLocation.y + canvas.height > images[mapFileName].height)
+		safeTopLeftMapLocation.y = images[mapFileName].height - canvas.height;    
+    
 	context.drawImage(images[mapFileName], safeTopLeftMapLocation.x, safeTopLeftMapLocation.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
 	
 	var playerImageX = Math.round(0.5*canvas.width - 0.5*images[playerFileName].width + (optimalTopLeftMapLocation.x - safeTopLeftMapLocation.x) + playerDrawOffset.x);
@@ -154,40 +190,23 @@ function draw()
 	context.drawImage(images[playerFileName], playerImageX, playerImageY);
 	
 	document.getElementById('remainingFood').innerHTML = food;
-	document.getElementById('hitPoints').innerHTML = hitPoints + "/" + maxHitPoints;
+	document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
 	document.getElementById('gold').innerHTML = gold;
-}
-
-function calculateMapPosition()
-{
-	var topLeftMapLocation = new vector2(0, 0);
-	topLeftMapLocation.x = map.tile1Center.x + (map.tileSize.x * playerPosition.x);
-	topLeftMapLocation.y = map.tile1Center.y + (map.tileSize.y * playerPosition.y);
-
-	if(!isOnEvenTile())
-	{
-		topLeftMapLocation.y += 0.5 * map.tileSize.y;	
-	}
-
-	topLeftMapLocation.x -= 0.5 * canvas.width;
-	topLeftMapLocation.y -= 0.5 * canvas.height;
-	return topLeftMapLocation;
-}
-
-function calculateLegalDrawPosition(unsafeDrawLocation)
-{
-	var safeDrawLocation = new vector2(unsafeDrawLocation.x, unsafeDrawLocation.y);
-
-	if(safeDrawLocation.x < 0)
-		safeDrawLocation.x = 0;
-	if(safeDrawLocation.y < 0)
-		safeDrawLocation.y = 0;
-	if(safeDrawLocation.x + canvas.width > images[mapFileName].width)
-		safeDrawLocation.x = images[mapFileName].width - canvas.width;
-	if(safeDrawLocation.y + canvas.height > images[mapFileName].height)
-		safeDrawLocation.y = images[mapFileName].height - canvas.height;
-		
-	return safeDrawLocation;
+    
+    for(var x = 0; x < terrain.length; x++)
+    {
+        for(var y = 0; y < terrain[x].length; y++)
+        {
+            // 0 - Farmland
+            // 1 - Countryside
+            // 2 - Forset
+            // 3 - Hills
+            // 4 - Mountains
+            // 5 - Swamp
+            // 6 - Desert
+            
+        }
+    }
 }
 
 // TODO(ian): Does this have an off by one error?
@@ -252,6 +271,21 @@ function d6()
 {
 	return Math.floor(Math.random()*6) + 1;
 }
+
+// 0 - Farmland
+// 1 - Countryside
+// 2 - Forset
+// 3 - Hills
+// 4 - Mountains
+// 5 - Swamp
+// 6 - Desert
+
+// 7 - Cross River
+// 8 - On Road
+// 9 - Airborne
+// 10 - Rafting
+var terrain = [
+[1,4,4,2,2,1,1,3,4,3,3,2,1,5,0,0,3,4,4,4]];
 
 canvas.addEventListener("mousedown", doMouseDown, true);
 function doMouseDown(event)
