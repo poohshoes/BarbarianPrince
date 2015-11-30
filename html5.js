@@ -14,6 +14,7 @@ function vector2(x, y)
 
 var canvas;
 var context;
+var imagesToLoad = [];
 var images = {};
 var map = new mapInfo();
 
@@ -37,19 +38,25 @@ function loadContent()
 	canvas = document.getElementById('canvasId');
 	context = canvas.getContext("2d");
 	gold = getWealthFromCode(2);
-	
-	loadImage(mapFileName);
-	loadImage(playerFileName);
 
-	draw();
-	
-	updateFoodDisplay();
+    imagesToLoad.push(mapFileName);
+    imagesToLoad.push(playerFileName);
+    loadImagesThenDraw();
 }
 
-function loadImage(name)
+function loadImagesThenDraw()
 {
-  images[name] = new Image();
-  images[name].src = "images/" + name;
+    if(imagesToLoad.length > 0)
+    {
+        var name = imagesToLoad.pop();
+        images[name] = new Image();
+        images[name].onload = loadImagesThenDraw;
+        images[name].src = "images/" + name;
+    }
+    else
+    {
+        draw();
+    }
 }
 
 function endTurn()
@@ -61,7 +68,9 @@ function endTurn()
 function endTurnFoodProcessing()
 {
 	if(food > 0)
+    {
 		food--;
+    }
 }
 
 function moveSouth()
@@ -87,7 +96,9 @@ function moveSouthEast()
 	if(canMoveEast() && (isOnEvenTile() || canMoveSouth()))
 	{
 		if(!isOnEvenTile())
+        {
 			playerPosition.y++;
+        }
 		playerPosition.x++;
 		endTurn();
 	}
@@ -98,7 +109,9 @@ function moveSouthWest()
 	if(canMoveWest() && (isOnEvenTile() || canMoveSouth()))
 	{
 		if(!isOnEvenTile())
+        {
 			playerPosition.y++;
+        }
 		playerPosition.x--;
 		endTurn();
 	}
@@ -109,7 +122,9 @@ function moveNorthEast()
 	if(canMoveEast() && (!isOnEvenTile() || canMoveNorth()))
 	{
 		if(isOnEvenTile())
+        {
 			playerPosition.y--;
+        }
 		playerPosition.x++;
 		endTurn();
 	}
@@ -120,7 +135,9 @@ function moveNorthWest()
 	if(canMoveWest() && (!isOnEvenTile() || canMoveNorth()))
 	{
 		if(isOnEvenTile())
+        {
 			playerPosition.y--;
+        }
 		playerPosition.x--;
 		endTurn();
 	}
@@ -154,7 +171,7 @@ function isOnEvenTile()
 function draw()
 {
 	// Clear the canvas
-	canvas.width = canvas.width;
+	//canvas.width = canvas.width;
 
 	var optimalTopLeftMapLocation = calculateMapPosition();
 	var safeTopLeftMapLocation = calculateLegalDrawPosition(optimalTopLeftMapLocation);
