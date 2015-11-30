@@ -1,0 +1,34 @@
+.flipVertical {
+    -moz-transform: scaleY(-1);
+    -webkit-transform: scaleY(-1);
+    -o-transform: scaleY(-1);
+    transform: scaleY(-1);
+    filter: flipv; /*IE*/
+}
+
+.font {
+	font-family:"Courier New";
+	font-size:30px;
+	font-variant: small-caps;
+	font-weight: 900;
+}
+
+.north {
+	position:relative;
+	left:45px;
+}
+
+.south {
+	position:relative;
+	left:45px;
+}
+
+.northEast {
+	position:relative;
+	left:45px;
+}
+
+.southEast {
+	position:relative;
+	left:45px;
+}
