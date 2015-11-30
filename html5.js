@@ -15,7 +15,7 @@ function vector2(x, y)
 var canvas;
 var context;
 var imagesToLoad = [];
-var images = {};
+var images = [];
 var map = new mapInfo();
 
 var mapFileName = "map.jpg";
@@ -60,22 +60,17 @@ function loadImagesThenDraw()
 }
 
 function endTurn()
-{
-	endTurnFoodProcessing();
-	draw();	
-}
-
-function endTurnFoodProcessing()
-{
-	if(food > 0)
+{	
+    if(food > 0)
     {
 		food--;
     }
+	draw();	
 }
 
 function moveSouth()
 {
-	if(canMoveSouth())
+	if(playerPosition.y < map.heightInTiles - 1)
 	{
 		playerPosition.y++;
 		endTurn();
@@ -84,7 +79,7 @@ function moveSouth()
 
 function moveNorth()
 {
-	if(canMoveNorth())
+	if(playerPosition.y > 0)
 	{
 		playerPosition.y--;
 		endTurn();
@@ -93,7 +88,7 @@ function moveNorth()
 
 function moveSouthEast()
 {
-	if(canMoveEast() && (isOnEvenTile() || canMoveSouth()))
+	if((playerPosition.x < map.widthInTiles - 1) && (isOnEvenTile() || playerPosition.y < map.heightInTiles - 1))
 	{
 		if(!isOnEvenTile())
         {
@@ -106,7 +101,7 @@ function moveSouthEast()
 
 function moveSouthWest()
 {
-	if(canMoveWest() && (isOnEvenTile() || canMoveSouth()))
+	if(playerPosition.x > 0 && (isOnEvenTile() || playerPosition.y < map.heightInTiles - 1))
 	{
 		if(!isOnEvenTile())
         {
@@ -119,7 +114,7 @@ function moveSouthWest()
 
 function moveNorthEast()
 {
-	if(canMoveEast() && (!isOnEvenTile() || canMoveNorth()))
+	if((playerPosition.x < map.widthInTiles - 1) && (!isOnEvenTile() || playerPosition.y > 0))
 	{
 		if(isOnEvenTile())
         {
@@ -132,7 +127,7 @@ function moveNorthEast()
 
 function moveNorthWest()
 {
-	if(canMoveWest() && (!isOnEvenTile() || canMoveNorth()))
+	if(playerPosition.x > 0 && (!isOnEvenTile() || playerPosition.y > 0))
 	{
 		if(isOnEvenTile())
         {
@@ -143,26 +138,6 @@ function moveNorthWest()
 	}
 }
 
-function canMoveEast()
-{
-	return (playerPosition.x < map.widthInTiles - 1)
-}
-
-function canMoveWest()
-{
-	return (playerPosition.x > 0)
-}
-
-function canMoveNorth()
-{
-	return (playerPosition.y > 0)
-}
-
-function canMoveSouth()
-{
-	return (playerPosition.y < map.heightInTiles - 1)
-}
-
 function isOnEvenTile()
 {
 	return (playerPosition.x % 2 == 0)
@@ -170,9 +145,6 @@ function isOnEvenTile()
 
 function draw()
 {
-	// Clear the canvas
-	//canvas.width = canvas.width;
-
 	var optimalTopLeftMapLocation = calculateMapPosition();
 	var safeTopLeftMapLocation = calculateLegalDrawPosition(optimalTopLeftMapLocation);
 	context.drawImage(images[mapFileName], safeTopLeftMapLocation.x, safeTopLeftMapLocation.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
@@ -181,9 +153,9 @@ function draw()
 	var playerImageY = Math.round(0.5*canvas.height - 0.5*images[playerFileName].height + (optimalTopLeftMapLocation.y - safeTopLeftMapLocation.y) + playerDrawOffset.y);
 	context.drawImage(images[playerFileName], playerImageX, playerImageY);
 	
-	updateFoodDisplay();
-	updateHitPointDisplay();
-	updateGoldDisplay();
+	document.getElementById('remainingFood').innerHTML = food;
+	document.getElementById('hitPoints').innerHTML = hitPoints + "/" + maxHitPoints;
+	document.getElementById('gold').innerHTML = gold;
 }
 
 function calculateMapPosition()
@@ -218,23 +190,7 @@ function calculateLegalDrawPosition(unsafeDrawLocation)
 	return safeDrawLocation;
 }
 
-function updateFoodDisplay()
-{
-	document.getElementById('remainingFood').innerHTML = food;
-}
-
-function updateHitPointDisplay()
-{
-	document.getElementById('hitPoints').innerHTML = hitPoints + "/" + maxHitPoints;
-}
-
-function updateGoldDisplay()
-{
-	document.getElementById('gold').innerHTML = gold;
-}
-
-
-	
+// TODO(ian): Does this have an off by one error?
 var wealthTable = [
 [0,0,0,0,0,0],
 [0,0,1,1,2,2],
@@ -295,4 +251,11 @@ function getWealthFromCode(wealthCode)
 function d6()
 {
 	return Math.floor(Math.random()*6) + 1;
+}
+
+canvas.addEventListener("mousedown", doMouseDown, true);
+function doMouseDown(event)
+{
+    update();
+    draw();
 }
