@@ -159,7 +159,38 @@ function drawAndUpdate()
         var playerPosition = getDrawLocationFromTile(firstTileCenter, playerTilePosition, new v2(images[playerFileName].width, images[playerFileName].height), playerDrawOffset);
         context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
         
-        var tileUnderMouse = 
+        // Tile under mouse.
+        {
+            var mouseRelativeToFirstTileCenter = v2Subtract(mousePosition, firstTileCenter);
+            var evenGrid = v2HadamardDivision(mouseRelativeToFirstTileCenter, map.tileSize);
+            var evenGridRounded = v2Copy(evenGrid);
+            evenGridRounded.x /= 2;
+            v2RoundAssign(evenGridRounded);
+            evenGridRounded.x *= 2;
+            var evenGridDistance = v2Length(v2Subtract(evenGrid, evenGridRounded));
+            
+            var oddGrid = new v2(evenGrid.x, evenGrid.y - 0.5);
+            var oddGridRounded = v2Copy(oddGrid);
+            oddGridRounded.x -= 1;
+            oddGridRounded.x /= 2;
+            v2RoundAssign(oddGridRounded);
+            oddGridRounded.x *= 2;
+            oddGridRounded.x += 1;
+            var oddGridDistance = v2Length(v2Subtract(oddGrid, oddGridRounded));
+            
+            var gridUnderMouse = evenGridRounded;
+            if(oddGridDistance < evenGridDistance)
+            {
+                gridUnderMouse = oddGridRounded;
+            }
+            
+            var center = getDrawLocationFromTile(firstTileCenter, gridUnderMouse, new v2(0, 0), new v2(0, 0));
+            var radius = 10;
+            context.beginPath();
+            context.arc(center.x, center.y, radius, 0, 2 * Math.PI);
+            context.fillStyle = 'yellow';
+            context.fill();
+        }
         
         // Todo(ian): Draw these on the canvas.
         document.getElementById('remainingFood').innerHTML = food;
@@ -244,8 +275,21 @@ guardsmen may find you.";
         else
         {
             context.fillText("Event " + state.eventNumber + " not found.", 10, 25);
+            state.type = 'none';
         }
     }
+}
+
+function getDrawLocationFromTile(firstTileCenter, tilePosition, size, offset)
+{
+    var result = v2Add(firstTileCenter, offset);
+    v2AddAssign(result, v2Hadamard(map.tileSize, tilePosition));
+    v2SubtractAssign(result, v2Multiply(size, 0.5));
+    if(!(tilePosition.x % 2 == 0))
+    {
+        result.y += 0.5 * map.tileSize.y;
+    }
+    return result;
 }
 
 function continueButtonPressed()
@@ -287,7 +331,7 @@ function drawWrappedText(text, maxWidth, lineHeight, x, startY)
         }
         
         y += lineHeight;
-        context.fillText(currentString, x, y);
+        context.fillText(currentString, Math.round(x), Math.round(y));
         currentString = '';
         y += lineHeight;
     }
@@ -300,7 +344,6 @@ function endTurn()
     {
 		food--;
     }
-	draw();	
 }
 
 function moveSouth()
@@ -463,18 +506,6 @@ function setEvent(letter, number)
     }
 }
 
-function getDrawLocationFromTile(firstTileCenter, tilePosition, size, offset)
-{
-    var result = v2Add(firstTileCenter, offset);
-    v2AddAssign(result, v2Hadamard(map.tileSize, tilePosition));
-    v2SubtractAssign(result, v2Multiply(size, 0.5));
-    if(!(tilePosition.x % 2 == 0))
-    {
-        result.y += 0.5 * map.tileSize.y;
-    }
-    return result;
-}
-
 //
 // === INPUT ===
 //
@@ -552,6 +583,14 @@ function v2Hadamard(one, two)
     return result;
 }
 
+function v2HadamardDivision(one, two)
+{
+    var result = new v2();
+    result.x = one.x / two.x;
+    result.y = one.y / two.y;
+    return result;
+}
+
 function v2Divide(one, scalar)
 {
     var result = new v2();
@@ -622,6 +661,18 @@ function v2Normalize(a)
         result = v2Divide(a, v2Length(a));
     }
     return result;
+}
+
+function v2Round(v)
+{
+    var result = new v2(Math.round(v.x), Math.round(v.y));
+    return result;
+}
+
+function v2RoundAssign(v)
+{
+    v.x = Math.round(v.x);
+    v.y = Math.round(v.y);
 }
 
 function v2Copy(v)
