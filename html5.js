@@ -87,6 +87,26 @@ function endTurn()
 	draw();	
 }
 
+function tryMoveTo(newTile)
+{
+    // 0 - Farmland
+    // 1 - Countryside
+    // 2 - Forset
+    // 3 - Hills
+    // 4 - Mountains
+    // 5 - Swamp
+    // 6 - Desert
+    var terrainType = terrain[newTile.y][newTile.x];
+    
+    // TODO(ian): Handle these cases.
+    // 7 - Cross River
+    // 8 - On Road
+    // 9 - Airborne
+    // 10 - Rafting
+    
+    var lostSave = travelTableLost[terrainType];   
+}
+
 function moveSouth()
 {
 	if(playerTilePosition.y < map.heightInTiles - 1)
@@ -164,55 +184,43 @@ function isOnEvenTile()
 
 function draw()
 {
-    var optimalTopLeftMapLocation = new v2(0, 0);
-	optimalTopLeftMapLocation.x = map.tile1Center.x + (map.tileSize.x * playerTilePosition.x);
-	optimalTopLeftMapLocation.y = map.tile1Center.y + (map.tileSize.y * playerTilePosition.y);
+    var topLeftMapPosition = v2Add(map.tile1Center, v2Hadamard(map.tileSize, playerTilePosition));
 	if(!isOnEvenTile())
 	{
-		optimalTopLeftMapLocation.y += 0.5 * map.tileSize.y;	
+		topLeftMapPosition.y += 0.5 * map.tileSize.y;	
 	}
-	optimalTopLeftMapLocation.x -= 0.5 * canvas.width;
-	optimalTopLeftMapLocation.y -= 0.5 * canvas.height;
+	topLeftMapPosition.x -= 0.5 * canvas.width;
+	topLeftMapPosition.y -= 0.5 * canvas.height;
+	if(topLeftMapPosition.x < 0)
+    {
+		topLeftMapPosition.x = 0;
+    }
+	if(topLeftMapPosition.y < 0)
+    {
+		topLeftMapPosition.y = 0;
+    }
+	if(topLeftMapPosition.x + canvas.width > images[mapFileName].width)
+    {
+		topLeftMapPosition.x = images[mapFileName].width - canvas.width;
+    }
+	if(topLeftMapPosition.y + canvas.height > images[mapFileName].height)
+    {
+		topLeftMapPosition.y = images[mapFileName].height - canvas.height;    
+    }
+	context.drawImage(images[mapFileName], topLeftMapPosition.x, topLeftMapPosition.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
     
-    var safeTopLeftMapLocation = new v2(optimalTopLeftMapLocation.x, optimalTopLeftMapLocation.y);
-	if(safeTopLeftMapLocation.x < 0)
-		safeTopLeftMapLocation.x = 0;
-	if(safeTopLeftMapLocation.y < 0)
-		safeTopLeftMapLocation.y = 0;
-	if(safeTopLeftMapLocation.x + canvas.width > images[mapFileName].width)
-		safeTopLeftMapLocation.x = images[mapFileName].width - canvas.width;
-	if(safeTopLeftMapLocation.y + canvas.height > images[mapFileName].height)
-		safeTopLeftMapLocation.y = images[mapFileName].height - canvas.height;    
+    var firstTileCenter = v2Subtract(map.tile1Center, topLeftMapPosition);
     
-	context.drawImage(images[mapFileName], safeTopLeftMapLocation.x, safeTopLeftMapLocation.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-    
-	var playerImageX = Math.round(0.5*canvas.width - 0.5*images[playerFileName].width + (optimalTopLeftMapLocation.x - safeTopLeftMapLocation.x) + playerDrawOffset.x);
-	var playerImageY = Math.round(0.5*canvas.height - 0.5*images[playerFileName].height + (optimalTopLeftMapLocation.y - safeTopLeftMapLocation.y) + playerDrawOffset.y);
-	context.drawImage(images[playerFileName], playerImageX, playerImageY);
-    
-    var cameraPixelPosition = new v2(0, 0);
-    /*
-    var playerPixelPosition = v2Hadamard(playerTilePosition, map.tileSize);
-    v2SubtractAssign(playerPixelPosition, cameraPixelPosition);
-    v2AddAssign(playerPixelPosition, playerDrawOffset);
-    playerPixelPosition.x -= 0.5*images[playerFileName].width;
-    playerPixelPosition.y -= 0.5*images[playerFileName].height;
-	context.drawImage(images[playerFileName], Math.round(playerPixelPosition.x), Math.round(playerPixelPosition.y));
-	*/
-    
-    /* Todo(ian): What should the coordinate system look like?
-        - 0,0 would be the center of tile 0, 0?
-        - then if you are 5 tiles east you add 5 tile widths.
-        - but we also need to look at wether your tile evenness is equal to the frame tile evenness
-    */
-    
+    var playerPosition = getDrawLocationFromTile(firstTileCenter, playerTilePosition, new v2(images[playerFileName].width, images[playerFileName].height), playerDrawOffset);
+    context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
+        
 	document.getElementById('remainingFood').innerHTML = food;
 	document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
 	document.getElementById('gold').innerHTML = gold;
     
-    for(var x = 0; x < terrain.length; x++)
+    /*for(var y = 0; y < terrain.length; y++)
     {
-        for(var y = 0; y < terrain[x].length; y++)
+        for(var x = 0; x < terrain[y].length; x++)
         {
             // 0 - Farmland
             // 1 - Countryside
@@ -221,22 +229,52 @@ function draw()
             // 4 - Mountains
             // 5 - Swamp
             // 6 - Desert
-            
-            var center = cameraPixelPosition + (new v2(x, y) * map.tileSize);
-            if(x % 2 == 0)
+            var color = '#FFFFFF';
+            switch(terrain[y][x])
             {
-                center.y += 0.5 * map.tileSize.y;
+                case 0:
+                    color = '#a07a39';
+                    break;
+                case 1:
+                    color = '#d9b886';
+                    break;
+                case 2:
+                    color = '#54603a';
+                    break;
+                case 3:
+                    color = '#d49557';
+                    break;
+                case 4:
+                    color = '#434739';
+                    break;
+                case 5:
+                    color = '#bf8b7f';
+                    break;
+                case 6:
+                    color = '#fdeddc';
+                    break;
             }
+            
+            var center = getDrawLocationFromTile(firstTileCenter, new v2(x, y), new v2(0, 0), new v2(0, 0));
             var radius = 10;
             context.beginPath();
             context.arc(center.x, center.y, radius, 0, 2 * Math.PI);
-            context.fillStyle = 'green';
+            context.fillStyle = color;
             context.fill();
-            //context.lineWidth = 0;
-            //context.strokeStyle = '#003300';
-            //context.stroke();
         }
+    }*/
+}
+
+function getDrawLocationFromTile(firstTileCenter, tilePosition, size, offset)
+{
+    var result = v2Add(firstTileCenter, offset);
+    v2AddAssign(result, v2Hadamard(map.tileSize, tilePosition));
+    v2SubtractAssign(result, v2Multiply(size, 0.5));
+    if(!(tilePosition.x % 2 == 0))
+    {
+        result.y += 0.5 * map.tileSize.y;
     }
+    return result;
 }
 
 //
@@ -245,8 +283,8 @@ function draw()
 
 function doMouseDown(event)
 {
-    update();
-    draw();
+    //update();
+    //draw();
 }
 
 //
@@ -387,13 +425,43 @@ function angleToV2(a)
 // 4 - Mountains
 // 5 - Swamp
 // 6 - Desert
+var terrain = [
+[1,4,4,2,2,1,1,3,4,3,3,2,1,5,0,0,3,4,4,4],
+[1,2,2,2,1,1,1,2,1,2,3,2,5,1,5,1,3,4,4,4],
+[4,2,2,4,4,4,4,2,2,3,5,3,1,1,2,4,4,1,4,3],
+[1,3,4,4,4,1,1,4,3,1,1,4,2,2,2,2,1,4,3,1],
+[3,3,1,4,2,3,2,2,1,1,4,1,1,3,4,4,4,4,1,3],
+[6,6,6,3,3,2,1,3,1,4,4,4,3,3,4,6,4,4,1,4],
+[3,3,3,6,1,1,1,2,1,2,3,4,4,6,6,6,6,4,4,3],
+[1,1,1,2,2,1,1,2,2,1,3,3,6,6,6,6,6,3,4,4],
+[1,1,2,2,2,5,2,2,1,0,3,3,6,6,6,6,3,4,4,3],
+[1,1,2,1,1,2,5,1,1,3,1,1,3,3,6,3,6,4,4,3],
+[2,1,1,5,5,5,2,2,2,3,4,4,4,3,3,4,3,3,1,4],
+[1,1,5,1,1,1,2,2,3,1,3,4,2,3,3,3,4,3,3,4],
+[1,5,5,1,2,1,5,2,2,1,3,1,4,2,1,1,3,3,3,3],
+[5,5,2,2,2,1,1,2,5,1,4,4,1,0,1,1,1,1,1,1],
+[5,2,2,1,1,1,2,2,2,5,1,3,1,0,0,1,2,2,1,2],
+[2,0,1,1,2,2,2,0,0,5,1,1,0,1,1,1,2,5,2,5],
+[2,0,0,1,1,1,1,1,1,1,2,1,1,2,2,5,2,2,2,2],
+[2,1,1,0,2,0,1,1,2,2,1,2,1,1,2,2,1,3,1,1],
+[1,1,0,0,0,0,0,1,1,3,5,2,1,2,2,1,3,1,1,1],
+[1,2,1,0,1,1,1,1,1,4,2,2,1,1,2,1,1,2,2,2],
+[1,2,1,2,1,1,2,1,1,4,4,1,1,5,2,2,5,2,0,0],
+[1,0,0,0,2,1,1,1,3,4,4,2,1,5,5,5,2,0,0,0],
+[2,1,0,0,1,1,2,1,3,3,4,4,1,5,5,5,1,1,0,0]];
 
+// 0 - Farmland
+// 1 - Countryside
+// 2 - Forset
+// 3 - Hills
+// 4 - Mountains
+// 5 - Swamp
+// 6 - Desert
 // 7 - Cross River
 // 8 - On Road
 // 9 - Airborne
 // 10 - Rafting
-var terrain = [
-[1,4,4,2,2,1,1,3,4,3,3,2,1,5,0,0,3,4,4,4]];
+var travelTableLost = [10, 9, 8, 8, 7, 5, 6, 8, 1000, 12, 1000];
 
 // TODO(ian): Does this have an off by one error?
 var wealthTable = [
