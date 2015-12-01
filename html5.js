@@ -61,6 +61,40 @@ function loadContent()
     imagesToLoad.push(mapFileName);
     imagesToLoad.push(playerFileName);
     loadImagesThenDraw();
+    
+    var spawn = d6();
+    if(spawn == 1)
+    {
+        playerTilePosition.x = 0;
+        playerTilePosition.y = 0;
+    }
+    else if(spawn == 2)
+    {
+        playerTilePosition.x = 6;
+        playerTilePosition.y = 0;
+    }
+    else if(spawn == 3)
+    {
+        playerTilePosition.x = 8;
+        playerTilePosition.y = 0;
+    }
+    else if(spawn == 4)
+    {
+        playerTilePosition.x = 12;
+        playerTilePosition.y = 0;
+    }
+    else if(spawn == 5)
+    {
+        playerTilePosition.x = 14;
+        playerTilePosition.y = 0;
+    }
+    else if(spawn == 6)
+    {
+        playerTilePosition.x = 18;
+        playerTilePosition.y = 0;
+    }
+    
+    doEvent('e', 001);
 }
 
 function loadImagesThenDraw()
@@ -80,11 +114,93 @@ function loadImagesThenDraw()
 
 function endTurn()
 {	
+    // TODO(ian): Advance day counter (70 days total)
     if(food > 0)
     {
 		food--;
     }
 	draw();	
+}
+
+function moveSouth()
+{
+	if(playerTilePosition.y < map.heightInTiles - 1)
+	{
+        var newTile = new v2(playerTilePosition.x, playerTilePosition.y + 1);
+        tryMoveTo(newTile);
+		endTurn();
+	}
+}
+
+function moveNorth()
+{
+	if(playerTilePosition.y > 0)
+	{
+        var newTile = new v2(playerTilePosition.x, playerTilePosition.y - 1);
+        tryMoveTo(newTile);
+		endTurn();
+	}
+}
+
+function moveSouthEast()
+{
+	if((playerTilePosition.x < map.widthInTiles - 1) && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
+	{
+        var newTile = new v2(playerTilePosition.x + 1, playerTilePosition.y);
+		if(!isOnEvenTile())
+        {
+			newTile.y++;
+        }        
+        tryMoveTo(newTile);
+		endTurn();
+	}
+}
+
+function moveSouthWest()
+{
+	if(playerTilePosition.x > 0 && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
+	{
+        var newTile = new v2(playerTilePosition.x - 1, playerTilePosition.y);
+		if(!isOnEvenTile())
+        {
+			newTile.y++;
+        }
+        tryMoveTo(newTile);
+		endTurn();
+	}
+}
+
+function moveNorthEast()
+{
+	if((playerTilePosition.x < map.widthInTiles - 1) && (!isOnEvenTile() || playerTilePosition.y > 0))
+	{
+        var newTile = new v2(playerTilePosition.x + 1, playerTilePosition.y);
+		if(isOnEvenTile())
+        {
+			newTile.y--;
+        }
+        tryMoveTo(newTile);
+		endTurn();
+	}
+}
+
+function moveNorthWest()
+{
+	if(playerTilePosition.x > 0 && (!isOnEvenTile() || playerTilePosition.y > 0))
+	{
+        var newTile = new v2(playerTilePosition.x - 1, playerTilePosition.y);
+		if(isOnEvenTile())
+        {
+			newTile.y--;
+        }
+        tryMoveTo(newTile);
+		endTurn();
+	}
+}
+
+function isOnEvenTile()
+{
+	return (playerTilePosition.x % 2 == 0)
 }
 
 function tryMoveTo(newTile)
@@ -96,7 +212,7 @@ function tryMoveTo(newTile)
     // 4 - Mountains
     // 5 - Swamp
     // 6 - Desert
-    var terrainType = terrain[newTile.y][newTile.x];
+    var currentTerrainType = terrain[playerTilePosition.y][playerTilePosition.x];
     
     // TODO(ian): Handle these cases.
     // 7 - Cross River
@@ -104,82 +220,83 @@ function tryMoveTo(newTile)
     // 9 - Airborne
     // 10 - Rafting
     
-    var lostSave = travelTableLost[terrainType];   
+    var lostSave = travelTableLost[currentTerrainType]; 
+    if(d6() + d6() >= lostSave)
+    {
+        // You are lost, lol
+        // TODO(ian): lose any remaining moves if mounted
+        terrainEvent(currentTerrainType);
+    }
+    else
+    {
+        var newTerrainType = terrain[newTile.y][newTile.x];
+        terrainEvent(newTerrainType);
+        playerTilePosition = newTile;
+    }
 }
 
-function moveSouth()
+function terrainEvent(terrainType)
 {
-	if(playerTilePosition.y < map.heightInTiles - 1)
-	{
-		playerTilePosition.y++;
-		endTurn();
-	}
-}
-
-function moveNorth()
-{
-	if(playerTilePosition.y > 0)
-	{
-		playerTilePosition.y--;
-		endTurn();
-	}
-}
-
-function moveSouthEast()
-{
-	if((playerTilePosition.x < map.widthInTiles - 1) && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
-	{
-		if(!isOnEvenTile())
+    var eventSave = travelTableEvent[terrainType];
+    if(d6() + d6() >= eventSave)
+    {
+        var chanceIndex = d6() - 1;
+        var eventLetter = 'r';
+        if(chanceIndex == 0 && terrainType == 0)
         {
-			playerTilePosition.y++;
+            eventLetter = 'e';
         }
-		playerTilePosition.x++;
-		endTurn();
-	}
+        var eventNumber = travelTableNumbers[terrainType][chanceIndex];
+        doEvent(eventLetter, eventNumber);
+    }
 }
 
-function moveSouthWest()
+function doEvent(letter, number)
 {
-	if(playerTilePosition.x > 0 && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
-	{
-		if(!isOnEvenTile())
+    if(letter == 'r' && number >= 231 && number <= 280)
+    {
+        var newLetter = 'e';
+        var travelEventIndex = d6() - 1;
+        var newNumber = travelEvents[number - 231][travelEventIndex];
+        doEvent(newLetter, newNumber);
+    }
+    else if(letter == 'r' && number == 230)
+    {
+        var travelEventIndex = d6() + d6() - 2;
+        var newNumber = raftTravelEventNumbers[travelEventIndex];
+        var newLetter = 'e';
+        if(travelEventIndex == 6)
         {
-			playerTilePosition.y++;
+            newLetter = 'r';
         }
-		playerTilePosition.x--;
-		endTurn();
-	}
-}
-
-function moveNorthEast()
-{
-	if((playerTilePosition.x < map.widthInTiles - 1) && (!isOnEvenTile() || playerTilePosition.y > 0))
-	{
-		if(isOnEvenTile())
+        doEvent(newLetter, newNumber);
+    }
+    else if(letter == 'e')
+    {
+        if(number == 1)
         {
-			playerTilePosition.y--;
+            window.alert(
+"Evil events have overtaken your Northlands Kingdom. Your father, the old king, is dead - assassinated by rivals \
+to the throne. These usurpers now hold the palace with their mercenary royal guard. You have escaped, and \
+must collect 500 gold pieces to raise a force to smash them and retake your heritage. Furthermore, the \
+usurpers have powerful friends overseas. If you can't return to take them out in ten weeks, their allies will arm \
+and you will lose your kingdom forever. \
+To escape the mercenary and royal guard, your loyal body servant Ogab smuggled you into a merchant \
+caravan to the southern border. \
+Now, at dawn you roll out of the merchant wagons into a ditch, dust off your clothes, loosen your swordbelt, and \
+get ready to start the first day of your adventure. See r203 for possible actions available to you. \
+Important Note: if you finish actions for a day on any hex north of the Tragoth River, the mercenary royal \
+guardsmen may find you. See e002 after normal events are concluded, but before you take your evening meal(r215).");
         }
-		playerTilePosition.x++;
-		endTurn();
-	}
-}
-
-function moveNorthWest()
-{
-	if(playerTilePosition.x > 0 && (!isOnEvenTile() || playerTilePosition.y > 0))
-	{
-		if(isOnEvenTile())
+        else
         {
-			playerTilePosition.y--;
+            window.alert("Event not handled " + letter + number);
         }
-		playerTilePosition.x--;
-		endTurn();
-	}
-}
-
-function isOnEvenTile()
-{
-	return (playerTilePosition.x % 2 == 0)
+    }
+    else
+    {
+        window.alert("Event not handled " + letter + number);
+    }
 }
 
 function draw()
@@ -462,6 +579,73 @@ var terrain = [
 // 9 - Airborne
 // 10 - Rafting
 var travelTableLost = [10, 9, 8, 8, 7, 5, 6, 8, 1000, 12, 1000];
+var travelTableEvent = [8, 9, 9, 10, 9, 10, 10, 10, 9, 10, 10];
+var travelTableNumbers = [
+[009, 231, 232, 233, 234, 235],
+[232, 236, 237, 238, 239, 240],
+[232, 241, 242, 243, 244, 240],
+[232, 245, 246, 247, 248, 249],
+[232, 250, 251, 252, 253, 248],
+[232, 254, 255, 256, 257, 258],
+[259, 260, 261, 262, 263, 264],
+[232, 265, 266, 267, 268, 269],
+[270, 271, 272, 273, 274, 275],
+[276, 277, 278, 279, 280, 281],
+[230, 230, 230, 230, 230, 230]];
+
+var travelEvents = [
+[018, 018, 022, 022, 023, 130],
+[003, 004, 005, 006, 007, 008],
+[128, 128, 128, 128, 129, 017],
+[049, 048, 032, 081, 050, 050],
+[078, 078, 079, 079, 009, 009],
+[009, 009, 050, 018, 022, 023],
+[052, 055, 057, 051, 054, 052],
+[077, 075, 075, 075, 076, 081],
+[044, 046, 067, 064, 068, 069],
+[078, 078, 078, 078, 079, 079],
+[074, 074, 073, 009, 051, 128],
+[071, 071, 052, 082, 080, 080],
+[083, 083, 084, 084, 076, 075],
+[165, 166, 065, 064, 087, 087],
+[098, 102, 023, 051, 068, 022],
+[028, 028, 058, 070, 055, 056],
+[076, 076, 076, 075, 128, 128],
+[118, 052, 059, 067, 066, 064],
+[078, 078, 078, 085, 079, 079],
+[099, 100, 023, 068, 101, 102],
+[028, 028, 058, 055, 052, 054],
+[078, 078, 079, 079, 088, 065],
+[085, 085, 086, 086, 086, 095],
+[022, 009, 073, 051, 051, 074],
+[034, 082, 164, 052, 057, 098],
+[091, 091, 094, 094, 092, 092],
+[089, 089, 089, 090, 064, 093],
+[078, 078, 078, 095, 095, 097],
+[022, 129, 128, 051, 023, 068],
+[028, 082, 055, 003, 004, 028],
+[005, 120, 120, 120, 067, 066],
+[034, 164, 164, 091, 091, 120],
+[064, 064, 121, 121, 121, 093],
+[078, 078, 078, 078, 096, 096],
+[122, 122, 122, 009, 051, 074],
+[123, 123, 057, 057, 052, 055],
+[094, 094, 091, 091, 075, 084],
+[083, 076, 077, 124, 124, 124],
+[122, 122, 122, 125, 126, 127],
+[018, 022, 023, 073, 009, 009],
+[050, 051, 051, 051, 003, 003],
+[004, 004, 005, 006, 006, 008],
+[007, 007, 057, 130, 128, 128],
+[049, 048, 081, 128, 129, 129],
+[078, 078, 079, 079, 128, 129],
+[102, 102, 103, 103, 104, 104],
+[112, 112, 112, 112, 108, 108],
+[106, 106, 105, 105, 079, 079],
+[107, 109, 077, 101, 110, 111],
+[099, 098, 100, 101, 064, 065]];
+
+var raftTravelEventNumbers = [125, 226, 018, 129, 127, 128, 232, 051, 094, 091, 126];
 
 // TODO(ian): Does this have an off by one error?
 var wealthTable = [
