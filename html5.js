@@ -6,12 +6,6 @@ function mapInfo()
 	this.tileSize = new v2(68, 78);
 }
 
-function vector2(x, y)
-{
-	this.x = x;
-	this.y = y;
-}
-
 var canvas;
 var context;
 var imagesToLoad = [];
@@ -28,8 +22,10 @@ var gold = 0;
 var party = [];
 
 // Player position in tiles
-var playerTilePosition = new vector2(0, 0);
-var playerDrawOffset = new vector2(-8, -25);
+var playerTilePosition = new v2(0, 0);
+var playerDrawOffset = new v2(-8, -25);
+
+var state;
 
 window.onload = loadContent;
 
@@ -53,14 +49,6 @@ function loadContent()
     }
     party[0].mounted = false;
 	gold = getWealthFromCode(2);
-
-	canvas = document.getElementById('canvasId');
-	context = canvas.getContext("2d");
-    canvas.addEventListener("mousedown", doMouseDown, true);
-
-    imagesToLoad.push(mapFileName);
-    imagesToLoad.push(playerFileName);
-    loadImagesThenDraw();
     
     var spawn = d6();
     if(spawn == 1)
@@ -94,21 +82,214 @@ function loadContent()
         playerTilePosition.y = 0;
     }
     
-    doEvent('e', 001);
+	canvas = document.getElementById('canvasId');
+    canvas.addEventListener("click", onClick, true);
+    canvas.addEventListener("keypress", onKeyPress, true);
+    canvas.addEventListener("mousemove", onMouseMove, true);
+	context = canvas.getContext("2d");
+
+    state = new Object();
+    state.type = 'event';
+    state.eventNumber = 001;
+    
+    imagesToLoad.push(mapFileName);
+    imagesToLoad.push(playerFileName);
+    loadImagesThenStart();
+    // Note(ian): Don't do anything after load images then draw as it relies on events to fire off Draw.
 }
 
-function loadImagesThenDraw()
+function loadImagesThenStart()
 {
     if(imagesToLoad.length > 0)
     {
         var name = imagesToLoad.pop();
         images[name] = new Image();
-        images[name].onload = loadImagesThenDraw;
+        images[name].onload = loadImagesThenStart;
         images[name].src = "images/" + name;
     }
     else
     {
-        draw();
+        main();
+    }
+}
+
+function main()
+{
+	drawAndUpdate();
+	requestAnimationFrame(main);
+}
+
+function drawAndUpdate()
+{
+    keysPressed = nextKeysPressed;
+    nextKeysPressed = {};
+    mouseClicked = nextMouseClicked;
+    nextMouseClicked = false;
+    
+    if(state.type == 'none')
+    {
+        // TODO(ian): Do click to move.
+        var topLeftMapPosition = v2Add(map.tile1Center, v2Hadamard(map.tileSize, playerTilePosition));
+        if(!isOnEvenTile())
+        {
+            topLeftMapPosition.y += 0.5 * map.tileSize.y;	
+        }
+        topLeftMapPosition.x -= 0.5 * canvas.width;
+        topLeftMapPosition.y -= 0.5 * canvas.height;
+        if(topLeftMapPosition.x < 0)
+        {
+            topLeftMapPosition.x = 0;
+        }
+        if(topLeftMapPosition.y < 0)
+        {
+            topLeftMapPosition.y = 0;
+        }
+        if(topLeftMapPosition.x + canvas.width > images[mapFileName].width)
+        {
+            topLeftMapPosition.x = images[mapFileName].width - canvas.width;
+        }
+        if(topLeftMapPosition.y + canvas.height > images[mapFileName].height)
+        {
+            topLeftMapPosition.y = images[mapFileName].height - canvas.height;    
+        }
+        context.drawImage(images[mapFileName], topLeftMapPosition.x, topLeftMapPosition.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+        
+        var firstTileCenter = v2Subtract(map.tile1Center, topLeftMapPosition);
+        
+        var playerPosition = getDrawLocationFromTile(firstTileCenter, playerTilePosition, new v2(images[playerFileName].width, images[playerFileName].height), playerDrawOffset);
+        context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
+        
+        var tileUnderMouse = 
+        
+        // Todo(ian): Draw these on the canvas.
+        document.getElementById('remainingFood').innerHTML = food;
+        document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
+        document.getElementById('gold').innerHTML = gold;
+        
+        /*for(var y = 0; y < terrain.length; y++)
+        {
+            for(var x = 0; x < terrain[y].length; x++)
+            {
+                // 0 - Farmland
+                // 1 - Countryside
+                // 2 - Forset
+                // 3 - Hills
+                // 4 - Mountains
+                // 5 - Swamp
+                // 6 - Desert
+                var color = '#FFFFFF';
+                switch(terrain[y][x])
+                {
+                    case 0:
+                        color = '#a07a39';
+                        break;
+                    case 1:
+                        color = '#d9b886';
+                        break;
+                    case 2:
+                        color = '#54603a';
+                        break;
+                    case 3:
+                        color = '#d49557';
+                        break;
+                    case 4:
+                        color = '#434739';
+                        break;
+                    case 5:
+                        color = '#bf8b7f';
+                        break;
+                    case 6:
+                        color = '#fdeddc';
+                        break;
+                }
+                
+                var center = getDrawLocationFromTile(firstTileCenter, new v2(x, y), new v2(0, 0), new v2(0, 0));
+                var radius = 10;
+                context.beginPath();
+                context.arc(center.x, center.y, radius, 0, 2 * Math.PI);
+                context.fillStyle = color;
+                context.fill();
+            }
+        }*/
+    }
+    else if(state.type == 'event')
+    {
+        context.font = '14pt Courier New';
+        context.fillStyle = 'black';
+        if(state.eventNumber == 1)
+        {
+            var text = [];
+            text[0] =
+"Evil events have overtaken your Northlands Kingdom. Your father, the old king, is dead - assassinated by rivals \
+to the throne. These usurpers now hold the palace with their mercenary royal guard. You have escaped, and \
+must collect 500 gold pieces to raise a force to smash them and retake your heritage. Furthermore, the \
+usurpers have powerful friends overseas. If you can't return to take them out in ten weeks, their allies will arm \
+and you will lose your kingdom forever."
+            text[1] =
+"To escape the mercenary and royal guard, your loyal body servant Ogab smuggled you into a merchant \
+caravan to the southern border. \
+Now, at dawn you roll out of the merchant wagons into a ditch, dust off your clothes, loosen your swordbelt, and \
+get ready to start the first day of your adventure."
+            text[2] =
+"Important Note: if you finish actions for a day on any hex north of the Tragoth River, the mercenary royal \
+guardsmen may find you."; 
+//Todo(ian): See e002 after normal events are concluded, but before you take your evening meal(r215).";
+            drawWrappedText(text, canvas.width, 18, 0, 0);
+            
+            if(continueButtonPressed())
+            {
+                state.type = 'none';
+            }
+        }
+        else
+        {
+            context.fillText("Event " + state.eventNumber + " not found.", 10, 25);
+        }
+    }
+}
+
+function continueButtonPressed()
+{
+    return keysPressed[ascii(" ")] || keysPressed[enterKeyCode] || mouseClicked;
+}
+
+function drawWrappedText(text, maxWidth, lineHeight, x, startY)
+{
+    var currentString = '';
+    var y = startY;
+    var spaceWidth = context.measureText(' ').width;
+    for(var textIndex = 0;
+        textIndex < text.length;
+        textIndex++)
+    {
+        var parts = text[textIndex].split(' ');
+        for(var partIndex = 0;
+            partIndex < parts.length;
+            partIndex++)
+        {
+            var partWidth = context.measureText(parts[partIndex]).width;
+            var currentStringWidth = context.measureText(currentString).width;
+            if(currentString == '')
+            {
+                currentString = parts[partIndex];
+            }
+            else if(currentStringWidth + partWidth + spaceWidth <= maxWidth)
+            {
+                currentString += ' ' + parts[partIndex];
+            }
+            else
+            {
+                y += lineHeight;
+                context.fillText(currentString, x, y);
+                
+                currentString = parts[partIndex];
+            }
+        }
+        
+        y += lineHeight;
+        context.fillText(currentString, x, y);
+        currentString = '';
+        y += lineHeight;
     }
 }
 
@@ -247,18 +428,18 @@ function terrainEvent(terrainType)
             eventLetter = 'e';
         }
         var eventNumber = travelTableNumbers[terrainType][chanceIndex];
-        doEvent(eventLetter, eventNumber);
+        setEvent(eventLetter, eventNumber);
     }
 }
 
-function doEvent(letter, number)
+function setEvent(letter, number)
 {
     if(letter == 'r' && number >= 231 && number <= 280)
     {
         var newLetter = 'e';
         var travelEventIndex = d6() - 1;
         var newNumber = travelEvents[number - 231][travelEventIndex];
-        doEvent(newLetter, newNumber);
+        setEvent(newLetter, newNumber);
     }
     else if(letter == 'r' && number == 230)
     {
@@ -269,117 +450,17 @@ function doEvent(letter, number)
         {
             newLetter = 'r';
         }
-        doEvent(newLetter, newNumber);
+        setEvent(newLetter, newNumber);
     }
     else if(letter == 'e')
     {
-        if(number == 1)
-        {
-            window.alert(
-"Evil events have overtaken your Northlands Kingdom. Your father, the old king, is dead - assassinated by rivals \
-to the throne. These usurpers now hold the palace with their mercenary royal guard. You have escaped, and \
-must collect 500 gold pieces to raise a force to smash them and retake your heritage. Furthermore, the \
-usurpers have powerful friends overseas. If you can't return to take them out in ten weeks, their allies will arm \
-and you will lose your kingdom forever. \
-To escape the mercenary and royal guard, your loyal body servant Ogab smuggled you into a merchant \
-caravan to the southern border. \
-Now, at dawn you roll out of the merchant wagons into a ditch, dust off your clothes, loosen your swordbelt, and \
-get ready to start the first day of your adventure. See r203 for possible actions available to you. \
-Important Note: if you finish actions for a day on any hex north of the Tragoth River, the mercenary royal \
-guardsmen may find you. See e002 after normal events are concluded, but before you take your evening meal(r215).");
-        }
-        else
-        {
-            window.alert("Event not handled " + letter + number);
-        }
+        state.type = 'event';
+        state.eventNumber = number;
     }
     else
     {
         window.alert("Event not handled " + letter + number);
     }
-}
-
-function draw()
-{
-    var topLeftMapPosition = v2Add(map.tile1Center, v2Hadamard(map.tileSize, playerTilePosition));
-	if(!isOnEvenTile())
-	{
-		topLeftMapPosition.y += 0.5 * map.tileSize.y;	
-	}
-	topLeftMapPosition.x -= 0.5 * canvas.width;
-	topLeftMapPosition.y -= 0.5 * canvas.height;
-	if(topLeftMapPosition.x < 0)
-    {
-		topLeftMapPosition.x = 0;
-    }
-	if(topLeftMapPosition.y < 0)
-    {
-		topLeftMapPosition.y = 0;
-    }
-	if(topLeftMapPosition.x + canvas.width > images[mapFileName].width)
-    {
-		topLeftMapPosition.x = images[mapFileName].width - canvas.width;
-    }
-	if(topLeftMapPosition.y + canvas.height > images[mapFileName].height)
-    {
-		topLeftMapPosition.y = images[mapFileName].height - canvas.height;    
-    }
-	context.drawImage(images[mapFileName], topLeftMapPosition.x, topLeftMapPosition.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-    
-    var firstTileCenter = v2Subtract(map.tile1Center, topLeftMapPosition);
-    
-    var playerPosition = getDrawLocationFromTile(firstTileCenter, playerTilePosition, new v2(images[playerFileName].width, images[playerFileName].height), playerDrawOffset);
-    context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
-        
-	document.getElementById('remainingFood').innerHTML = food;
-	document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
-	document.getElementById('gold').innerHTML = gold;
-    
-    /*for(var y = 0; y < terrain.length; y++)
-    {
-        for(var x = 0; x < terrain[y].length; x++)
-        {
-            // 0 - Farmland
-            // 1 - Countryside
-            // 2 - Forset
-            // 3 - Hills
-            // 4 - Mountains
-            // 5 - Swamp
-            // 6 - Desert
-            var color = '#FFFFFF';
-            switch(terrain[y][x])
-            {
-                case 0:
-                    color = '#a07a39';
-                    break;
-                case 1:
-                    color = '#d9b886';
-                    break;
-                case 2:
-                    color = '#54603a';
-                    break;
-                case 3:
-                    color = '#d49557';
-                    break;
-                case 4:
-                    color = '#434739';
-                    break;
-                case 5:
-                    color = '#bf8b7f';
-                    break;
-                case 6:
-                    color = '#fdeddc';
-                    break;
-            }
-            
-            var center = getDrawLocationFromTile(firstTileCenter, new v2(x, y), new v2(0, 0), new v2(0, 0));
-            var radius = 10;
-            context.beginPath();
-            context.arc(center.x, center.y, radius, 0, 2 * Math.PI);
-            context.fillStyle = color;
-            context.fill();
-        }
-    }*/
 }
 
 function getDrawLocationFromTile(firstTileCenter, tilePosition, size, offset)
@@ -398,10 +479,32 @@ function getDrawLocationFromTile(firstTileCenter, tilePosition, size, offset)
 // === INPUT ===
 //
 
-function doMouseDown(event)
+var nextMouseClicked = false;
+var mouseClicked = false;
+function onClick(event)
 {
-    //update();
-    //draw();
+    nextMouseClicked = true;
+}
+
+var mousePosition = new v2(0, 0);
+function onMouseMove(event)
+{
+    mousePosition = new v2(event.clientX - canvas.offsetLeft, event.clientY - canvas.offsetTop);
+}
+
+var nextKeysPressed = {};
+var keysPressed;
+function onKeyPress(event)
+{
+	nextKeysPressed[event.keyCode] = true;
+}
+
+var enterKeyCode = 13;
+
+function ascii(character)
+{
+    var result = character.charCodeAt(0);
+    return result;
 }
 
 //
