@@ -15,6 +15,7 @@ var map = new mapInfo();
 var mapFileName = "map.jpg";
 var playerFileName = "player.png";
 var moveArrowFileName = "moveArrow.png";
+var tileHighlightFileName = "tileHighlight.png";
 
 var food = 5;
 var gold = 0;
@@ -94,6 +95,7 @@ function loadContent()
     
     imagesToLoad.push(mapFileName);
     imagesToLoad.push(playerFileName);
+	imagesToLoad.push(tileHighlightFileName);
     loadImagesThenStart();
     // Note(ian): Don't do anything after load images then draw as it relies on events to fire off Draw.
 }
@@ -160,6 +162,7 @@ function drawAndUpdate()
         context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
         
         // Tile under mouse.
+		var hotTile;
         {
             var mouseRelativeToFirstTileCenter = v2Subtract(mousePosition, firstTileCenter);
             var evenGrid = v2HadamardDivision(mouseRelativeToFirstTileCenter, map.tileSize);
@@ -178,19 +181,20 @@ function drawAndUpdate()
             oddGridRounded.x += 1;
             var oddGridDistance = v2Length(v2Subtract(oddGrid, oddGridRounded));
             
-            var gridUnderMouse = evenGridRounded;
+            hotTile = evenGridRounded;
             if(oddGridDistance < evenGridDistance)
             {
-                gridUnderMouse = oddGridRounded;
+                hotTile = oddGridRounded;
             }
             
-            var center = getDrawLocationFromTile(firstTileCenter, gridUnderMouse, new v2(0, 0), new v2(0, 0));
-            var radius = 10;
-            context.beginPath();
-            context.arc(center.x, center.y, radius, 0, 2 * Math.PI);
-            context.fillStyle = 'yellow';
-            context.fill();
+            // var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightFileName].width, images[tileHighlightFileName].height), new v2(0, 0));
+			// context.drawImage(images[tileHighlightFileName], center.x, center.y);
         }
+		
+		// Highlight Valid Moves
+		{
+			
+		}
         
         // Todo(ian): Draw these on the canvas.
         document.getElementById('remainingFood').innerHTML = food;
