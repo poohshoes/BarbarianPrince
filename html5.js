@@ -130,6 +130,8 @@ function drawAndUpdate()
     mouseClicked = nextMouseClicked;
     nextMouseClicked = false;
     
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    
     if(state.type == 'none')
     {
         // TODO(ian): Do click to move.
@@ -207,6 +209,7 @@ function drawAndUpdate()
                 moveTiles.push(new v2(playerTilePosition.x - 1, playerTilePosition.y + 1));
             }
             moveTiles.push(new v2(playerTilePosition.x, playerTilePosition.y + 1));
+            var hotTileInRange = false;
             for(var tileIndex = 0;
                 tileIndex < moveTiles.length;
                 tileIndex++)
@@ -214,21 +217,33 @@ function drawAndUpdate()
                 var tile = moveTiles[tileIndex];
                 if(tile.x >= 0 && tile.x < map.widthInTiles - 1 && tile.y >= 0 && tile.y < map.heightInTiles - 1)
                 {
-                    var imageFileName = tileHighlightGreyFileName;
                     if(v2Equals(tile, hotTile))
                     {
-                        imageFileName = tileHighlightYellowFileName;
-                        
-                        // Todo(ian): We might need to have a draw pass and an update pass.
-                        if(mouseClicked)
-                        {
-                            tryMoveTo(tile);
-                            endTurn();
-                        }
+                        hotTileInRange = true;
                     }
-                    var center = getDrawLocationFromTile(firstTileCenter, tile, new v2(images[imageFileName].width, images[imageFileName].height), new v2(0, 0));
-                    context.drawImage(images[imageFileName], center.x, center.y);
+                    else
+                    {
+                        var center = getDrawLocationFromTile(firstTileCenter, tile, new v2(images[tileHighlightGreyFileName].width, images[tileHighlightGreyFileName].height), new v2(0, 0));
+                        context.drawImage(images[tileHighlightGreyFileName], center.x, center.y);
+                    }
                 }
+            }
+            
+            // Note(ian): We want the hotTile highlight to draw overtop so it isn't under grey highlights.
+            if(hotTileInRange && hotTile.x >= 0 && hotTile.x < map.widthInTiles - 1 && hotTile.y >= 0 && hotTile.y < map.heightInTiles - 1)
+            {                
+                // Todo(ian): We might need to have a draw pass and an update pass.
+                if(mouseClicked)
+                {
+                    tryMoveTo(hotTile);    
+                    // TODO(ian): Advance day counter (70 days total)
+                    if(food > 0)
+                    {
+                        food--;
+                    }
+                }
+                var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightYellowFileName].width, images[tileHighlightYellowFileName].height), new v2(0, 0));
+                context.drawImage(images[tileHighlightYellowFileName], center.x, center.y);
             }
 		}
         
@@ -317,8 +332,13 @@ guardsmen may find you.";
         }
         else
         {
-            context.fillText("Event " + state.eventNumber + " not found.", 10, 25);
-            state.type = 'none';
+            var text = [];
+            text[0] = "Event " + state.eventNumber + " not found.";
+            drawWrappedText(text, canvas.width, 18, 0, 0);
+            if(continueButtonPressed())
+            {
+                state.type = 'none';
+            }
         }
     }
 }
@@ -377,15 +397,6 @@ function drawWrappedText(text, maxWidth, lineHeight, x, startY)
         context.fillText(currentString, Math.round(x), Math.round(y));
         currentString = '';
         y += lineHeight;
-    }
-}
-
-function endTurn()
-{	
-    // TODO(ian): Advance day counter (70 days total)
-    if(food > 0)
-    {
-		food--;
     }
 }
 
