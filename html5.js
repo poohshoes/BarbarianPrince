@@ -15,7 +15,8 @@ var map = new mapInfo();
 var mapFileName = "map.jpg";
 var playerFileName = "player.png";
 var moveArrowFileName = "moveArrow.png";
-var tileHighlightFileName = "tileHighlight.png";
+var tileHighlightGreyFileName = "tileHighlightGrey.png";
+var tileHighlightYellowFileName = "tileHighlightYellow.png";
 
 var food = 5;
 var gold = 0;
@@ -95,7 +96,8 @@ function loadContent()
     
     imagesToLoad.push(mapFileName);
     imagesToLoad.push(playerFileName);
-	imagesToLoad.push(tileHighlightFileName);
+	imagesToLoad.push(tileHighlightGreyFileName);
+	imagesToLoad.push(tileHighlightYellowFileName);
     loadImagesThenStart();
     // Note(ian): Don't do anything after load images then draw as it relies on events to fire off Draw.
 }
@@ -158,9 +160,6 @@ function drawAndUpdate()
         
         var firstTileCenter = v2Subtract(map.tile1Center, topLeftMapPosition);
         
-        var playerPosition = getDrawLocationFromTile(firstTileCenter, playerTilePosition, new v2(images[playerFileName].width, images[playerFileName].height), playerDrawOffset);
-        context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
-        
         // Tile under mouse.
 		var hotTile;
         {
@@ -193,8 +192,48 @@ function drawAndUpdate()
 		
 		// Highlight Valid Moves
 		{
-			
+			var moveTiles = [];
+            moveTiles.push(new v2(playerTilePosition.x, playerTilePosition.y - 1));
+            if(playerTilePosition.x % 2 == 0)
+            {
+                moveTiles.push(new v2(playerTilePosition.x + 1, playerTilePosition.y - 1));
+                moveTiles.push(new v2(playerTilePosition.x - 1, playerTilePosition.y - 1));
+            }
+            moveTiles.push(new v2(playerTilePosition.x + 1, playerTilePosition.y));
+            moveTiles.push(new v2(playerTilePosition.x - 1, playerTilePosition.y));
+            if(playerTilePosition.x % 2 == 1)
+            {
+                moveTiles.push(new v2(playerTilePosition.x + 1, playerTilePosition.y + 1));
+                moveTiles.push(new v2(playerTilePosition.x - 1, playerTilePosition.y + 1));
+            }
+            moveTiles.push(new v2(playerTilePosition.x, playerTilePosition.y + 1));
+            for(var tileIndex = 0;
+                tileIndex < moveTiles.length;
+                tileIndex++)
+            {
+                var tile = moveTiles[tileIndex];
+                if(tile.x >= 0 && tile.x < map.widthInTiles - 1 && tile.y >= 0 && tile.y < map.heightInTiles - 1)
+                {
+                    var imageFileName = tileHighlightGreyFileName;
+                    if(v2Equals(tile, hotTile))
+                    {
+                        imageFileName = tileHighlightYellowFileName;
+                        
+                        // Todo(ian): We might need to have a draw pass and an update pass.
+                        if(mouseClicked)
+                        {
+                            tryMoveTo(tile);
+                            endTurn();
+                        }
+                    }
+                    var center = getDrawLocationFromTile(firstTileCenter, tile, new v2(images[imageFileName].width, images[imageFileName].height), new v2(0, 0));
+                    context.drawImage(images[imageFileName], center.x, center.y);
+                }
+            }
 		}
+        
+        var playerPosition = getDrawLocationFromTile(firstTileCenter, playerTilePosition, new v2(images[playerFileName].width, images[playerFileName].height), playerDrawOffset);
+        context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
         
         // Todo(ian): Draw these on the canvas.
         document.getElementById('remainingFood').innerHTML = food;
@@ -350,82 +389,6 @@ function endTurn()
     }
 }
 
-function moveSouth()
-{
-	if(playerTilePosition.y < map.heightInTiles - 1)
-	{
-        var newTile = new v2(playerTilePosition.x, playerTilePosition.y + 1);
-        tryMoveTo(newTile);
-		endTurn();
-	}
-}
-
-function moveNorth()
-{
-	if(playerTilePosition.y > 0)
-	{
-        var newTile = new v2(playerTilePosition.x, playerTilePosition.y - 1);
-        tryMoveTo(newTile);
-		endTurn();
-	}
-}
-
-function moveSouthEast()
-{
-	if((playerTilePosition.x < map.widthInTiles - 1) && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
-	{
-        var newTile = new v2(playerTilePosition.x + 1, playerTilePosition.y);
-		if(!isOnEvenTile())
-        {
-			newTile.y++;
-        }        
-        tryMoveTo(newTile);
-		endTurn();
-	}
-}
-
-function moveSouthWest()
-{
-	if(playerTilePosition.x > 0 && (isOnEvenTile() || playerTilePosition.y < map.heightInTiles - 1))
-	{
-        var newTile = new v2(playerTilePosition.x - 1, playerTilePosition.y);
-		if(!isOnEvenTile())
-        {
-			newTile.y++;
-        }
-        tryMoveTo(newTile);
-		endTurn();
-	}
-}
-
-function moveNorthEast()
-{
-	if((playerTilePosition.x < map.widthInTiles - 1) && (!isOnEvenTile() || playerTilePosition.y > 0))
-	{
-        var newTile = new v2(playerTilePosition.x + 1, playerTilePosition.y);
-		if(isOnEvenTile())
-        {
-			newTile.y--;
-        }
-        tryMoveTo(newTile);
-		endTurn();
-	}
-}
-
-function moveNorthWest()
-{
-	if(playerTilePosition.x > 0 && (!isOnEvenTile() || playerTilePosition.y > 0))
-	{
-        var newTile = new v2(playerTilePosition.x - 1, playerTilePosition.y);
-		if(isOnEvenTile())
-        {
-			newTile.y--;
-        }
-        tryMoveTo(newTile);
-		endTurn();
-	}
-}
-
 function isOnEvenTile()
 {
 	return (playerTilePosition.x % 2 == 0)
@@ -563,6 +526,11 @@ function v2(x, y)
     }
     this.x = x;
     this.y = y;
+}
+
+function v2Equals(one, two)
+{
+    return one.x == two.x && one.y == two.y;
 }
 
 function v2Multiply(one, scalar)
