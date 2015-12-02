@@ -23,6 +23,9 @@ var gold = 0;
 
 var party = [];
 
+var debugTextMax = 20;
+var debugText = [debugTextMax];
+
 // Player position in tiles
 var playerTilePosition = new v2(0, 0);
 var playerDrawOffset = new v2(-8, -25);
@@ -34,6 +37,15 @@ window.onload = loadContent;
 // Todo(ian): 2 hex movement if mounted.  3 hex flying movement.
 // Todo(ian): click on tile to move, highlight movement options.
 // Todo(ian): sleeping / nighttime animation
+
+function addDebugText(text)
+{
+    if(debugText.length == debugTextMax)
+    {
+        debugText.shift();
+    }
+    debugText.push(text);
+}
 
 function loadContent()
 {
@@ -235,7 +247,38 @@ function drawAndUpdate()
                 // Todo(ian): We might need to have a draw pass and an update pass.
                 if(mouseClicked)
                 {
-                    tryMoveTo(hotTile);    
+                    // 0 - Farmland
+                    // 1 - Countryside
+                    // 2 - Forset
+                    // 3 - Hills
+                    // 4 - Mountains
+                    // 5 - Swamp
+                    // 6 - Desert
+                    var currentTerrainType = terrain[playerTilePosition.y][playerTilePosition.x];
+                    
+                    // TODO(ian): Handle these cases.
+                    // 7 - Cross River
+                    // 8 - On Road
+                    // 9 - Airborne
+                    // 10 - Rafting
+                    
+                    var lostSave = travelTableLost[currentTerrainType]; 
+                    var lostSaveRoll = d6() + d6();
+                    addDebugText("Lost Save: " + lostSaveRoll + " (needed below " + lostSave + ").");
+                    if(lostSaveRoll >= lostSave)
+                    {
+                        // TODO(ian): lose any remaining moves if mounted
+                        addDebugText("You Got Lost");
+                        terrainEvent(currentTerrainType);
+                    }
+                    else
+                    {
+                        var newTerrainType = terrain[hotTile.y][hotTile.x];
+                        terrainEvent(newTerrainType);
+                        playerTilePosition = hotTile;
+                    }
+                
+                    addDebugText("End Of Day");
                     // TODO(ian): Advance day counter (70 days total)
                     if(food > 0)
                     {
@@ -254,6 +297,17 @@ function drawAndUpdate()
         document.getElementById('remainingFood').innerHTML = food;
         document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
         document.getElementById('gold').innerHTML = gold;
+        
+        context.font = '10pt Lucida Console';
+        context.fillStyle = '#000000ff';
+        var y = 12;
+        for(var debugIndex = debugText.length - 1;
+            debugIndex >= 0;
+            debugIndex--)
+        {
+            context.fillText(debugText[debugIndex], 10, y);
+            y += 12;
+        }
         
         /*for(var y = 0; y < terrain.length; y++)
         {
@@ -322,12 +376,68 @@ get ready to start the first day of your adventure."
             text[2] =
 "Important Note: if you finish actions for a day on any hex north of the Tragoth River, the mercenary royal \
 guardsmen may find you."; 
-//Todo(ian): See e002 after normal events are concluded, but before you take your evening meal(r215).";
             drawWrappedText(text, canvas.width, 18, 0, 0);
             
             if(continueButtonPressed())
             {
-                state.type = 'none';
+                //Todo(ian): See e002 after normal events are concluded, but before you take your evening meal(r215).";
+                state.eventNumber = 2;
+                state.eventInitialized = false;
+            }
+        }
+        else if(state.eventNumber == 2)
+        {
+            var bypassEvent = false;
+            if(!state.eventInitialized)
+            {
+                state.eventInitialized = true;
+                var save = d6() - 3;
+                addDebugText("Event 002 save " + save);
+                if((playerTilePosition.x == 0 && playerTilePosition.y == 0) || (playerTilePosition.x == 14 && playerTilePosition.y == 0))
+                {
+                    save += 1;
+                    addDebugText("Event 002 save++");
+                }
+                
+                if(save <= 0)
+                {
+                    state.type = 'none';
+                    bypassEvent = true;
+                    addDebugText("Event 002 avoided.");
+                }
+                else
+                {
+                    state.eventState = {};
+                    state.eventState.combatants = [];
+                    var numMen = d6();
+                    for(var i = 0;
+                        i < numMen - 1;
+                        i++)
+                    {
+                        state.eventState.combatants[i] = getCombatant('Mercenary Royal Guardsmen', 5, 4, 4);
+                    }
+                }
+            }
+
+            if(!bypassEvent)
+            {         
+                var text = [];
+                text[0] =
+"Mercenary Royal Guardsmen"
+            text[1] =
+state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers as their royal guardsmen, are riding toward you! Each of which has a combat skill 5, endurance 4, wealth 4."
+
+                /*if(doButton("Negotiate"))
+                {
+                }
+                if(doButton("Evade"))
+                {
+                }
+                if(doButton("Fight"))
+                {
+                }*/           
+                
+                drawWrappedText(text, canvas.width, 18, 0, 0);
             }
         }
         else
@@ -341,6 +451,16 @@ guardsmen may find you.";
             }
         }
     }
+}
+
+function getCombatant(name, combatSkill, endurance, wealth)
+{
+    var result = {};
+    result.name = name;
+    result.combatSkill = combatSkill;
+    result.endurance = endurance;
+    result.wealth = wealth;
+    return result;
 }
 
 function getDrawLocationFromTile(firstTileCenter, tilePosition, size, offset)
@@ -405,42 +525,12 @@ function isOnEvenTile()
 	return (playerTilePosition.x % 2 == 0)
 }
 
-function tryMoveTo(newTile)
-{
-    // 0 - Farmland
-    // 1 - Countryside
-    // 2 - Forset
-    // 3 - Hills
-    // 4 - Mountains
-    // 5 - Swamp
-    // 6 - Desert
-    var currentTerrainType = terrain[playerTilePosition.y][playerTilePosition.x];
-    
-    // TODO(ian): Handle these cases.
-    // 7 - Cross River
-    // 8 - On Road
-    // 9 - Airborne
-    // 10 - Rafting
-    
-    var lostSave = travelTableLost[currentTerrainType]; 
-    if(d6() + d6() >= lostSave)
-    {
-        // You are lost, lol
-        // TODO(ian): lose any remaining moves if mounted
-        terrainEvent(currentTerrainType);
-    }
-    else
-    {
-        var newTerrainType = terrain[newTile.y][newTile.x];
-        terrainEvent(newTerrainType);
-        playerTilePosition = newTile;
-    }
-}
-
 function terrainEvent(terrainType)
 {
     var eventSave = travelTableEvent[terrainType];
-    if(d6() + d6() >= eventSave)
+    var eventSaveRoll = d6() + d6();
+    addDebugText("Event Save: " + eventSaveRoll + " (needed below " + eventSave + ").");
+    if(eventSaveRoll >= eventSave)
     {
         var chanceIndex = d6() - 1;
         var eventLetter = 'r';
