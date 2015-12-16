@@ -23,16 +23,34 @@ var gold = 0;
 
 var party = [];
 
-var debugTextMax = 20;
-var debugText = [debugTextMax];
-
-// Player position in tiles
 var playerTilePosition = new v2(0, 0);
 var playerDrawOffset = new v2(-8, -25);
 
 var state;
 
+var ui = new Object();
+ui.interacting = null;
+ui.hot = null;
+ui.nextHot = null;
+
+var debugTextMax = 20;
+var debugText = [debugTextMax];
+
 window.onload = loadContent;
+
+var lineHeight = 18;
+
+function defaultFont()
+{
+    context.font = '14pt Courier New';
+    context.fillStyle = 'black';
+}
+
+function debugFont()
+{
+    context.font = '10pt Lucida Console';
+    context.fillStyle = '#000000ff';
+}
 
 // Todo(ian): 2 hex movement if mounted.  3 hex flying movement.
 // Todo(ian): click on tile to move, highlight movement options.
@@ -199,9 +217,6 @@ function drawAndUpdate()
             {
                 hotTile = oddGridRounded;
             }
-            
-            // var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightFileName].width, images[tileHighlightFileName].height), new v2(0, 0));
-			// context.drawImage(images[tileHighlightFileName], center.x, center.y);
         }
 		
 		// Highlight Valid Moves
@@ -298,8 +313,7 @@ function drawAndUpdate()
         document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
         document.getElementById('gold').innerHTML = gold;
         
-        context.font = '10pt Lucida Console';
-        context.fillStyle = '#000000ff';
+        debugFont();
         var y = 12;
         for(var debugIndex = debugText.length - 1;
             debugIndex >= 0;
@@ -308,6 +322,8 @@ function drawAndUpdate()
             context.fillText(debugText[debugIndex], 10, y);
             y += 12;
         }
+        
+        //Todo(ian): Mercenaries of north of the river!
         
         /*for(var y = 0; y < terrain.length; y++)
         {
@@ -347,18 +363,17 @@ function drawAndUpdate()
                 }
                 
                 var center = getDrawLocationFromTile(firstTileCenter, new v2(x, y), new v2(0, 0), new v2(0, 0));
-                var radius = 10;
-                context.beginPath();
-                context.arc(center.x, center.y, radius, 0, 2 * Math.PI);
-                context.fillStyle = color;
-                context.fill();
+                drawCircle(10, center.x, center.y, color)
             }
         }*/
     }
     else if(state.type == 'event')
     {
-        context.font = '14pt Courier New';
-        context.fillStyle = 'black';
+        var panel = new Object();
+        panel.AtY = 0;
+        panel.AtX = 0;
+        
+        defaultFont();
         if(state.eventNumber == 1)
         {
             var text = [];
@@ -376,7 +391,7 @@ get ready to start the first day of your adventure."
             text[2] =
 "Important Note: if you finish actions for a day on any hex north of the Tragoth River, the mercenary royal \
 guardsmen may find you."; 
-            drawWrappedText(text, canvas.width, 18, 0, 0);
+            drawWrappedText(null, text, canvas.width);
             
             if(continueButtonPressed())
             {
@@ -427,24 +442,63 @@ guardsmen may find you.";
             text[1] =
 state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers as their royal guardsmen, are riding toward you! Each of which has a combat skill 5, endurance 4, wealth 4."
 
-                /*if(doButton("Negotiate"))
+                drawWrappedText(panel, text, canvas.width);
+
+                var optionMatrix = null;
+                if(doButton(panel, 'Negotiate'))
                 {
+                    optionMatrix = [
+                        ['r', 327],
+                        ['r', 328],
+                        ['r', 329],
+                        ['r', 323, 15],
+                        ['r', 323, 25],
+                        ['r', 306]
+                    ];
                 }
-                if(doButton("Evade"))
+                if(doButton(panel, 'Evade'))
                 {
+                    optionMatrix = [
+                        ['r', 307],
+                        ['r', 306],
+                        ['r', 304],
+                        ['r', 318],
+                        ['r', 311],
+                        ['r', 312],
+                        ['r', 312]
+                    ];
+                    //Todo(ian): * if your party all winged mounts, you can use a flying escape r313 instead of rolling for the evade option; if your entire party has mounts, add one (+1) to die roll. You can abandon un-mounted members of the party for this.    
                 }
-                if(doButton("Fight"))
+                if(doButton(panel, 'Fight'))
                 {
-                }*/           
+                    optionMatrix = [
+                        ['r', 300],
+                        ['r', 301],
+                        ['r', 303],
+                        ['r', 304],
+                        ['r', 305],
+                        ['r', 306]
+                    ];
+                }
                 
-                drawWrappedText(text, canvas.width, 18, 0, 0);
+                if(optionMatrix != null)
+                {
+                    var optionIndex = d6() - 1;
+                    var selectedOption = optionMatrix[optionIndex];
+                    var bribeAmount = 0;
+                    if(selectedOption.length == 3)
+                    {
+                        bribeAmount = selectedOption[2];
+                    }
+                    setEvent(selectedOption[0], selectedOption[1], bribeAmount);
+                }
             }
         }
         else
         {
             var text = [];
             text[0] = "Event " + state.eventNumber + " not found.";
-            drawWrappedText(text, canvas.width, 18, 0, 0);
+            drawWrappedText(null, text, canvas.width);
             if(continueButtonPressed())
             {
                 state.type = 'none';
@@ -480,10 +534,58 @@ function continueButtonPressed()
     return keysPressed[ascii(" ")] || keysPressed[enterKeyCode] || mouseClicked;
 }
 
-function drawWrappedText(text, maxWidth, lineHeight, x, startY)
+function doButton(panel, text)
 {
-    var currentString = '';
-    var y = startY;
+    var result = false;
+    
+    defaultFont();
+
+    var style = 'default';
+    var size = new v2(context.measureText(text).width, lineHeight);
+    if(panel.AtX <= mousePosition.x && mousePosition.x <= (panel.AtX + size.x) &&
+       panel.AtY <= mousePosition.y && mousePosition.y <= (panel.AtY + size.y))
+    {
+        style = 'highlight';
+        if(mouseClicked)
+        {
+            result = true;
+        }
+    }
+    
+    doText(panel, text, style);    
+    nextRow(panel, lineHeight);
+    
+    return result;
+}
+
+function nextRow(panel, rowHeight)
+{
+    panel.AtX = 0;
+    panel.AtY += rowHeight;
+}
+
+function doText(panel, text, style)
+{
+    defaultFont();
+    if(style == 'highlight')
+    {
+        context.fillStyle = 'blue';
+    }
+    //Note(ian): Javascript is draws text up instead of down from the position so we add lineHeight.
+    context.fillText(text, panel.AtX, panel.AtY + lineHeight);
+    //drawCircle(2, panel.AtX, panel.AtY, '#000000')
+    panel.AtX += context.measureText(text).width;
+}
+
+function drawWrappedText(panel, text)
+{
+    if(panel == null)
+    {
+        panel = new Object();
+        panel.AtY = 0;
+        panel.AtX = 0;
+    }
+    
     var spaceWidth = context.measureText(' ').width;
     for(var textIndex = 0;
         textIndex < text.length;
@@ -494,30 +596,34 @@ function drawWrappedText(text, maxWidth, lineHeight, x, startY)
             partIndex < parts.length;
             partIndex++)
         {
-            var partWidth = context.measureText(parts[partIndex]).width;
-            var currentStringWidth = context.measureText(currentString).width;
-            if(currentString == '')
+            if(partIndex == 0)
             {
-                currentString = parts[partIndex];
-            }
-            else if(currentStringWidth + partWidth + spaceWidth <= maxWidth)
-            {
-                currentString += ' ' + parts[partIndex];
+                var standardTab = 40;
+                panel.AtX = standardTab;
             }
             else
             {
-                y += lineHeight;
-                context.fillText(currentString, x, y);
-                
-                currentString = parts[partIndex];
+                panel.AtX += spaceWidth;
             }
+            var partWidth = context.measureText(parts[partIndex]).width;
+            if( (panel.AtX + partWidth) > canvas.width)
+            {
+                nextRow(panel, lineHeight);
+            }
+            
+            doText(panel, parts[partIndex]);
         }
-        
-        y += lineHeight;
-        context.fillText(currentString, Math.round(x), Math.round(y));
-        currentString = '';
-        y += lineHeight;
+        nextRow(panel, lineHeight);
+        nextRow(panel, lineHeight);
     }
+}
+
+function drawCircle(radius, x, y, color)
+{
+    context.beginPath();
+    context.arc(x, y, radius, 0, 2 * Math.PI);
+    context.fillStyle = color;
+    context.fill();
 }
 
 function isOnEvenTile()
@@ -543,7 +649,7 @@ function terrainEvent(terrainType)
     }
 }
 
-function setEvent(letter, number)
+function setEvent(letter, number, bribeAmount)
 {
     if(letter == 'r' && number >= 231 && number <= 280)
     {
