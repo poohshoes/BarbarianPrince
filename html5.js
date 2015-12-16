@@ -153,6 +153,16 @@ function main()
 	requestAnimationFrame(main);
 }
 
+function isValidTilePosition(tilePosition)
+{
+    return isValidTilePosition(tilePosition.x, tilePosition.y);
+}
+
+function isValidTilePosition(x, y)
+{
+    return x >= 0 && x < map.widthInTiles - 1 && y >= 0 && y < map.heightInTiles - 1;
+}
+
 function drawAndUpdate()
 {
     keysPressed = nextKeysPressed;
@@ -257,7 +267,7 @@ function drawAndUpdate()
             }
             
             // Note(ian): We want the hotTile highlight to draw overtop so it isn't under grey highlights.
-            if(hotTileInRange && hotTile.x >= 0 && hotTile.x < map.widthInTiles - 1 && hotTile.y >= 0 && hotTile.y < map.heightInTiles - 1)
+            if(hotTileInRange && isValidTilePosition(hotTile))
             {                
                 // Todo(ian): We might need to have a draw pass and an update pass.
                 if(mouseClicked)
@@ -293,12 +303,7 @@ function drawAndUpdate()
                         playerTilePosition = hotTile;
                     }
                 
-                    addDebugText("End Of Day");
-                    // TODO(ian): Advance day counter (70 days total)
-                    if(food > 0)
-                    {
-                        food--;
-                    }
+                    eveningUpkeep();
                 }
                 var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightYellowFileName].width, images[tileHighlightYellowFileName].height), new v2(0, 0));
                 context.drawImage(images[tileHighlightYellowFileName], center.x, center.y);
@@ -395,7 +400,6 @@ guardsmen may find you.";
             
             if(continueButtonPressed())
             {
-                //Todo(ian): See e002 after normal events are concluded, but before you take your evening meal(r215).";
                 state.eventNumber = 2;
                 state.eventInitialized = false;
             }
@@ -422,7 +426,10 @@ guardsmen may find you.";
                 }
                 else
                 {
-                    state.eventState = {};
+                    state.eventState = {};            
+                    state.eventState.playerStrikesFirst = true;
+                    state.eventState.surpriseAdvantage = 'none';
+                    state.eventState.bribe = 0;
                     state.eventState.combatants = [];
                     var numMen = d6();
                     for(var i = 0;
@@ -482,15 +489,14 @@ state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers 
                 }
                 
                 if(optionMatrix != null)
-                {
+                {                
                     var optionIndex = d6() - 1;
                     var selectedOption = optionMatrix[optionIndex];
-                    var bribeAmount = 0;
                     if(selectedOption.length == 3)
                     {
-                        bribeAmount = selectedOption[2];
+                        state.eventState.bribe = selectedOption[2];
                     }
-                    setEvent(selectedOption[0], selectedOption[1], bribeAmount);
+                    setEvent(selectedOption[0], selectedOption[1]);
                 }
             }
         }
@@ -507,6 +513,19 @@ state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers 
     }
 }
 
+
+function eveningUpkeep()
+{
+    addDebugText("End Of Day");
+    // TODO(ian): Advance day counter (70 days total)
+    
+    // Todo(ian): You must eat for the day (r215).
+    if(food > 0)
+    {
+        food--;
+    }
+}
+    
 function getCombatant(name, combatSkill, endurance, wealth)
 {
     var result = {};
@@ -649,25 +668,161 @@ function terrainEvent(terrainType)
     }
 }
 
-function setEvent(letter, number, bribeAmount)
+function setEvent(letter, number)
 {
-    if(letter == 'r' && number >= 231 && number <= 280)
+    if(letter == 'r')
     {
-        var newLetter = 'e';
-        var travelEventIndex = d6() - 1;
-        var newNumber = travelEvents[number - 231][travelEventIndex];
-        setEvent(newLetter, newNumber);
-    }
-    else if(letter == 'r' && number == 230)
-    {
-        var travelEventIndex = d6() + d6() - 2;
-        var newNumber = raftTravelEventNumbers[travelEventIndex];
-        var newLetter = 'e';
-        if(travelEventIndex == 6)
+        if(number >= 231 && number <= 280)
         {
-            newLetter = 'r';
+            var newLetter = 'e';
+            var travelEventIndex = d6() - 1;
+            var newNumber = travelEvents[number - 231][travelEventIndex];
+            setEvent(newLetter, newNumber);
         }
-        setEvent(newLetter, newNumber);
+        else if(number == 230)
+        {
+            var travelEventIndex = d6() + d6() - 2;
+            var newNumber = raftTravelEventNumbers[travelEventIndex];
+            var newLetter = 'e';
+            if(travelEventIndex == 6)
+            {
+                newLetter = 'r';
+            }
+            setEvent(newLetter, newNumber);
+        }
+        else if(number == 300)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = true;
+            state.eventState.surpriseAdvantage = 'player';
+        }
+        else if(number == 301)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = true;
+            var check = d6();
+            if(party[0].witAndWiles >= check)
+            {
+                state.eventState.surpriseAdvantage = 'player';
+            }
+        }
+        else if(number == 302)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = true;
+            var check = d6();
+            if(party[0].witAndWiles > check)
+            {
+                state.eventState.surpriseAdvantage = 'player';
+            }
+        }
+        else if(number == 303)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = true;
+            var check = d6();
+            if(party[0].length < check)
+            {
+                state.eventState.surpriseAdvantage = 'player';
+            }
+        }
+        else if(number == 304)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = true;
+        }
+        else if(number == 305)
+        {
+            state.type = 'combat';
+            var check = d6();
+            state.eventState.playerStrikesFirst = party[0].witAndWiles >= check;
+        }
+        else if(number == 306)
+        {
+            state.type = 'combat';
+            var check = d6();
+            state.eventState.playerStrikesFirst = party[0].witAndWiles > check;
+        }
+        else if(number == 307)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = false;
+        }
+        else if(number == 308)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = false;
+            var check = d6();
+            if(party[0].witAndWiles < check)
+            {
+                state.eventState.surpriseAdvantage = 'enemy';
+            }
+        }
+        else if(number == 309)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = false;
+            var check = d6();
+            if(party[0].witAndWiles <= check)
+            {
+                state.eventState.surpriseAdvantage = 'enemy';
+            }
+        }
+        else if(number == 310)
+        {
+            state.type = 'combat';
+            state.eventState.playerStrikesFirst = false;
+            state.eventState.surpriseAdvantage = 'enemy';
+        }
+        else if(number == 311)
+        {
+            state.type = 'none';
+            
+            var direction;
+            var newTilePosition
+            do
+            {
+                isValidDirection = true;
+                // 1-N, 2-NE, 3-SE, 4-S, 5-SW, 6-NW
+                direction = d6();
+                
+                // Todo(ian): Test this position generating code.
+                var newTilePosition = new v2(playerTilePosition.x, playerTilePosition.y);
+                if(direction == 2 || direction == 3)
+                {
+                    newTilePosition.x++;
+                }
+                else if(direction == 5 || direction == 6)
+                {
+                    newTilePosition.x--;
+                }
+                
+                if(direction == 1 ||
+                   (playerTilePosition.x % 2 == 0 && (direction == 2 || direction == 6)))
+                {
+                    newTilePosition.y--;
+                }
+                else if(direction == 4 ||
+                        (playerTilePosition.x % 2 == 1 && (direction == 3 || direction == 5)))
+                {
+                    newTilePosition.y++;
+                }
+                // Todo(ian): Prohibit escapes across a river unless you are all on winged mounts.
+            } while(!isValidTilePosition(newTilePosition));
+            
+            playerTilePosition = newTilePosition;
+            
+            eveningUpkeep();
+        }
+        else if(number == 325)
+        {
+            // Pass
+            eveningUpkeep();
+        }
+        else
+        {
+            window.alert("Event not handled " + letter + number);
+        }
     }
     else if(letter == 'e')
     {
