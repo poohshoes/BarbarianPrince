@@ -36,21 +36,14 @@ ui.nextHot = null;
 var debugTextMax = 20;
 var debugText = [debugTextMax];
 
-window.onload = loadContent;
+window.onload = initialize;
+window.addEventListener("keypress", onKeyPress, true);
 
+// Todo(ian): Replace this with a measurement of the height using the current font.
 var lineHeight = 18;
 
-function defaultFont()
-{
-    context.font = '14pt Courier New';
-    context.fillStyle = 'black';
-}
-
-function debugFont()
-{
-    context.font = '10pt Lucida Console';
-    context.fillStyle = '#000000ff';
-}
+var defaultTextStyle = new textStyle('Courier New', 14, 'black');
+var debugTextStyle = new textStyle('Lucida Console', 10, '#000000ff');
 
 // Todo(ian): 2 hex movement if mounted.  3 hex flying movement.
 // Todo(ian): click on tile to move, highlight movement options.
@@ -65,8 +58,27 @@ function addDebugText(text)
     debugText.push(text);
 }
 
-function loadContent()
+function initialize()
+{	
+	resetGame();
+ 
+	canvas = document.getElementById('canvasId');
+    canvas.addEventListener("click", onClick, true);
+    canvas.addEventListener("mousemove", onMouseMove, true);
+	context = canvas.getContext("2d");
+	setTextStyle(defaultTextStyle);
+ 
+    imagesToLoad.push(mapFileName);
+    imagesToLoad.push(playerFileName);
+	imagesToLoad.push(tileHighlightGreyFileName);
+	imagesToLoad.push(tileHighlightYellowFileName);
+    loadImagesThenStart();
+    // Note(ian): Don't do anything after load images then draw as it relies on events to fire off Draw.
+}
+
+function resetGame()
 {
+	party.length = 0;
     party.push({});
     party[0].name = "Cal Arath";
     party[0].title = "Barbarian Prince";
@@ -114,22 +126,9 @@ function loadContent()
         playerTilePosition.y = 0;
     }
     
-	canvas = document.getElementById('canvasId');
-    canvas.addEventListener("click", onClick, true);
-    canvas.addEventListener("keypress", onKeyPress, true);
-    canvas.addEventListener("mousemove", onMouseMove, true);
-	context = canvas.getContext("2d");
-
     state = new Object();
     state.type = 'event';
     state.eventNumber = 001;
-    
-    imagesToLoad.push(mapFileName);
-    imagesToLoad.push(playerFileName);
-	imagesToLoad.push(tileHighlightGreyFileName);
-	imagesToLoad.push(tileHighlightYellowFileName);
-    loadImagesThenStart();
-    // Note(ian): Don't do anything after load images then draw as it relies on events to fire off Draw.
 }
 
 function loadImagesThenStart()
@@ -246,7 +245,6 @@ function drawAndUpdate()
                 moveTiles.push(new v2(playerTilePosition.x - 1, playerTilePosition.y + 1));
             }
             moveTiles.push(new v2(playerTilePosition.x, playerTilePosition.y + 1));
-            var hotTileInRange = false;
             for(var tileIndex = 0;
                 tileIndex < moveTiles.length;
                 tileIndex++)
@@ -256,7 +254,43 @@ function drawAndUpdate()
                 {
                     if(v2Equals(tile, hotTile))
                     {
-                        hotTileInRange = true;
+						if(mouseClicked)
+						{
+							// 0 - Farmland
+							// 1 - Countryside
+							// 2 - Forset
+							// 3 - Hills
+							// 4 - Mountains
+							// 5 - Swamp
+							// 6 - Desert
+							var currentTerrainType = terrain[playerTilePosition.y][playerTilePosition.x];
+							
+							// TODO(ian): Handle these cases.
+							// 7 - Cross River
+							// 8 - On Road
+							// 9 - Airborne
+							// 10 - Rafting
+							
+							var lostSave = travelTableLost[currentTerrainType]; 
+							var lostSaveRoll = d6() + d6();
+							addDebugText("Lost Save: " + lostSaveRoll + " (needed below " + lostSave + ").");
+							if(lostSaveRoll >= lostSave)
+							{
+								// TODO(ian): lose any remaining moves if mounted
+								addDebugText("You Got Lost");
+								terrainEvent(currentTerrainType);
+							}
+							else
+							{
+								var newTerrainType = terrain[hotTile.y][hotTile.x];
+								terrainEvent(newTerrainType);
+								playerTilePosition = hotTile;
+							}
+						
+							eveningUpkeep();
+						}
+						var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightYellowFileName].width, images[tileHighlightYellowFileName].height), new v2(0, 0));
+						context.drawImage(images[tileHighlightYellowFileName], center.x, center.y);
                     }
                     else
                     {
@@ -264,49 +298,6 @@ function drawAndUpdate()
                         context.drawImage(images[tileHighlightGreyFileName], center.x, center.y);
                     }
                 }
-            }
-            
-            // Note(ian): We want the hotTile highlight to draw overtop so it isn't under grey highlights.
-            if(hotTileInRange && isValidTilePosition(hotTile))
-            {                
-                // Todo(ian): We might need to have a draw pass and an update pass.
-                if(mouseClicked)
-                {
-                    // 0 - Farmland
-                    // 1 - Countryside
-                    // 2 - Forset
-                    // 3 - Hills
-                    // 4 - Mountains
-                    // 5 - Swamp
-                    // 6 - Desert
-                    var currentTerrainType = terrain[playerTilePosition.y][playerTilePosition.x];
-                    
-                    // TODO(ian): Handle these cases.
-                    // 7 - Cross River
-                    // 8 - On Road
-                    // 9 - Airborne
-                    // 10 - Rafting
-                    
-                    var lostSave = travelTableLost[currentTerrainType]; 
-                    var lostSaveRoll = d6() + d6();
-                    addDebugText("Lost Save: " + lostSaveRoll + " (needed below " + lostSave + ").");
-                    if(lostSaveRoll >= lostSave)
-                    {
-                        // TODO(ian): lose any remaining moves if mounted
-                        addDebugText("You Got Lost");
-                        terrainEvent(currentTerrainType);
-                    }
-                    else
-                    {
-                        var newTerrainType = terrain[hotTile.y][hotTile.x];
-                        terrainEvent(newTerrainType);
-                        playerTilePosition = hotTile;
-                    }
-                
-                    eveningUpkeep();
-                }
-                var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightYellowFileName].width, images[tileHighlightYellowFileName].height), new v2(0, 0));
-                context.drawImage(images[tileHighlightYellowFileName], center.x, center.y);
             }
 		}
         
@@ -318,7 +309,7 @@ function drawAndUpdate()
         document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
         document.getElementById('gold').innerHTML = gold;
         
-        debugFont();
+        setTextStyle(debugTextStyle);
         var y = 12;
         for(var debugIndex = debugText.length - 1;
             debugIndex >= 0;
@@ -327,6 +318,7 @@ function drawAndUpdate()
             context.fillText(debugText[debugIndex], 10, y);
             y += 12;
         }
+		setTextStyle(defaultTextStyle);
         
         //Todo(ian): Mercenaries of north of the river!
         
@@ -378,7 +370,6 @@ function drawAndUpdate()
         panel.AtY = 0;
         panel.AtX = 0;
         
-        defaultFont();
         if(state.eventNumber == 1)
         {
             var text = [];
@@ -431,9 +422,11 @@ guardsmen may find you.";
                     state.eventState.surpriseAdvantage = 'none';
                     state.eventState.bribe = 0;
                     state.eventState.combatants = [];
+					state.eventState.combatArenas = [];
+					state.eventState.combatInitialized = false;
                     var numMen = d6();
                     for(var i = 0;
-                        i < numMen - 1;
+                        i < numMen;
                         i++)
                     {
                         state.eventState.combatants[i] = getCombatant('Mercenary Royal Guardsmen', 5, 4, 4);
@@ -444,10 +437,8 @@ guardsmen may find you.";
             if(!bypassEvent)
             {         
                 var text = [];
-                text[0] =
-"Mercenary Royal Guardsmen"
-            text[1] =
-state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers as their royal guardsmen, are riding toward you! Each of which has a combat skill 5, endurance 4, wealth 4."
+                text[0] = "Mercenary Royal Guardsmen";
+				text[1] = state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers as their royal guardsmen, are riding toward you! Each of which has a combat skill 5, endurance 4, wealth 4.";
 
                 drawWrappedText(panel, text, canvas.width);
 
@@ -474,7 +465,7 @@ state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers 
                         ['r', 312],
                         ['r', 312]
                     ];
-                    //Todo(ian): * if your party all winged mounts, you can use a flying escape r313 instead of rolling for the evade option; if your entire party has mounts, add one (+1) to die roll. You can abandon un-mounted members of the party for this.    
+                    //Todo(ian): If your party all winged mounts, you can use a flying escape r313 instead of rolling for the evade option; if your entire party has mounts, add one (+1) to die roll. You can abandon un-mounted members of the party for this.    
                 }
                 if(doButton(panel, 'Fight'))
                 {
@@ -511,6 +502,247 @@ state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers 
             }
         }
     }
+    else if(state.type == 'combat')
+    {
+		var overflowIsEnemies = state.eventState.combatants.length > party.length;
+		var numArenas = Math.min(state.eventState.combatants.length, party.length);
+		if (!state.eventState.combatInitialized)
+		{
+			state.eventState.combatInitialized = true;
+			
+			for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+			{
+				var arena = {};
+				arena.unitList = [];
+				arena.unitList[0] = party[arenaIndex];
+				arena.unitList[1] = state.eventState.combatants[arenaIndex];
+				state.eventState.combatArenas[arenaIndex] = arena;
+			}
+			var maxUnits = Math.max(state.eventState.combatants.length, party.length);
+			var arenaIndex = 0;
+			for (var unitIndex = numArenas; unitIndex < maxUnits; unitIndex++)
+			{
+				var arena = state.eventState.combatArenas[arenaIndex];
+				if (numArenas < party.length)
+				{
+					arena.unitList[arena.unitList.length] = party[unitIndex];
+				}
+				else
+				{
+					arena.unitList[arena.unitList.length] = state.eventState.combatants[unitIndex];
+				}
+				
+				arenaIndex++;
+				arenaIndex %= numArenas;
+			}
+		}
+		
+		var arenaSectionSize = new v2(canvas.width / numArenas, canvas.height / 4);
+		
+		for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+		{
+			var arena = state.eventState.combatArenas[arenaIndex];
+			for (var unitIndex = 0; unitIndex < arena.unitList.length; unitIndex++)
+			{
+				var unit = arena.unitList[unitIndex];
+				
+				var verticalSectionIndex = 3;
+				if (unitIndex == 0)
+				{
+					verticalSectionIndex = 2;
+				}
+				else if (unitIndex == 1)
+				{
+					verticalSectionIndex = 1;
+				}
+				else if (overflowIsEnemies)
+				{
+					verticalSectionIndex = 0;
+				}
+				
+				var topLeft = new v2(arenaIndex * arenaSectionSize.x, verticalSectionIndex * arenaSectionSize.y);
+				var bottomRight = new v2(topLeft.x + arenaSectionSize.x, topLeft.y + arenaSectionSize.y);
+				if (unitIndex > 1)
+				{
+					var numOverflowUnits = arena.unitList.length - 2;
+					var overflowWidth = arenaSectionSize.x / numOverflowUnits;
+					var overflowIndex = unitIndex - 2;
+					topLeft.x += overflowWidth * overflowIndex;
+					bottomRight.x -= overflowWidth * (numOverflowUnits - overflowIndex - 1);
+				}
+				
+				//drawLine(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y, 'red');
+				
+				var name = unit.name;
+				var textPosition = v2Copy(topLeft);
+				var unitMaxWidth = bottomRight.x - topLeft.x;
+				var nameStyle = new textStyle(defaultTextStyle.name, defaultTextStyle.size, defaultTextStyle.color);
+				var textWidth = context.measureText(name).width;
+				for (; textWidth > unitMaxWidth; )
+				{
+					nameStyle.size--;
+					setTextStyle(nameStyle);
+					textWidth = context.measureText(name).width;
+				}
+				textPosition.x += (unitMaxWidth - textWidth) / 2.0;
+				drawText(textPosition.x, textPosition.y, name, 'default');
+				setTextStyle(defaultTextStyle);
+				textPosition.y += lineHeight;
+				drawText(textPosition.x, textPosition.y, unit.combatSkill);
+				textPosition.y += lineHeight;
+				drawText(textPosition.x, textPosition.y, unit.currentEndurance + '/' + unit.maxEndurance, 'default');
+			}
+		}
+		
+		// Apply the combat.
+		if (keysPressed[enterKeyCode])
+		{
+			for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+			{
+				var arena = state.eventState.combatArenas[arenaIndex];
+				for (var attackTurn = 0; attackTurn <= 1; attackTurn++)
+				{
+					var overflowAttackTurn;
+					var playerAttackTurn;
+					var victim;
+					var victimIndex = attackTurn;
+					if (state.eventState.playerStrikesFirst)
+					{
+						victimIndex++;
+					}
+					victimIndex = victimIndex % 2;
+					victim = arena.unitList[victimIndex];
+					if (state.eventState.playerStrikesFirst)
+					{
+						playerAttackTurn = 0;
+						if (overflowIsEnemies)
+						{
+							overflowAttackTurn = 1;
+						}
+						else
+						{
+							overflowAttackTurn = 0;
+						}
+					}
+					else 
+					{
+						playerAttackTurn = 1;
+						if (overflowIsEnemies)
+						{
+							overflowAttackTurn = 0;
+						}
+						else
+						{
+							overflowAttackTurn = 1;
+						}
+					}
+					for (var unitIndex = 0; unitIndex < arena.unitList.length; unitIndex++)
+					{
+						var unit = arena.unitList[unitIndex];
+						
+						if(unit.currentEndurance > 1 &&
+							((unitIndex == 0 && attackTurn == playerAttackTurn) ||
+						     (unitIndex == 1 && attackTurn != playerAttackTurn) ||
+						     (unitIndex > 1 && attackTurn == overflowAttackTurn)))
+					   {
+						    var attackValue = unit.combatSkill - victim.combatSkill;
+						    // +2 Target of strike has wounds equalling half or more his endurance
+							if (victim.currentEndurance <= (victim.maxEndurance / 2))
+							{
+								attackValue += 2;
+							}
+							// -1 Striker has one or more wounds
+							if (unit.currentEndurance != unit.maxEndurance)
+							{
+								attackValue--;
+							}
+							// -1 Striker has wounds equalling half or more his endurance (in addition to the above)
+							if (unit.currentEndurance <= (unit.maxEndurance / 2))
+							{
+								attackValue--;
+							}
+							attackValue += d6() + d6();
+							
+							// Note(ian): Because the wound table has a -1 entry we had to shift it up 1 so it could start at 0.
+							attackValue++;
+							
+							var wounds = 0;
+							if (attackValue >= 0 && attackValue < woundTable.length)
+							{
+								wounds = woundTable[attackValue];
+							}
+							
+							victim.currentEndurance -= wounds;
+							
+							// Todo(ian): Surprise, Escape, and Routs.
+					   }
+					}	
+				}
+			}
+			
+			// Evaluate the combat state and arena unit positions.
+			var numLivingPlayers = 0;
+			for (var partyIndex = 0; partyIndex < party.length; partyIndex++)
+			{
+				if (party[partyIndex].currentEndurance > 0)
+				{
+					numLivingPlayers++;
+				}
+			}
+			var numLivingEnemies = 0;
+			for (var enemyIndex = 0; enemyIndex < state.eventState.combatants.length; enemyIndex++)
+			{
+				if (state.eventState.combatants[enemyIndex].currentEndurance > 0)
+				{
+					numLivingEnemies++;
+				}
+			}
+			
+			if (numLivingPlayers == 0)
+			{
+				state.type = 'gameOver';
+			}
+			else if (numLivingEnemies == 0)
+			{
+				
+			}
+			else
+			{
+				// Todo(ian): Highlight areas in red if they have not valid targets (and prevent processing the round);
+				// Todo(ian): make sure the max number of possible arenas is being used.
+				// Todo(ian): Give the players the ability to drag and drop units.
+				for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+				{
+					var arena = state.eventState.combatArenas[arenaIndex];
+					var enemy = arena.unitList[1];
+					if (overflowIsEnemies &&
+						enemy.currentEndurance <= 1)
+					{
+						var matchFound = false;
+						for (var unitIndex = 2; unitIndex < arena.unitList.length && !matchFound; unitIndex++)
+						{
+							var unit = arena.unitList[unitIndex];
+							if (unit.currentEndurance > 1)
+							{
+								matchFound = true;
+								var temp = arena.unitList[1];
+								arena.unitList[1] = arena.unitList[unitIndex];
+								arena.unitList[unitIndex] = temp;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+    else if(state.type == 'gameOver')
+    {
+		drawText(10, 10, 'You died, press Enter to start a new game', 'default');
+		if (keysPressed[enterKeyCode])
+		{
+			resetGame();
+		}
+	}
 }
 
 
@@ -531,7 +763,8 @@ function getCombatant(name, combatSkill, endurance, wealth)
     var result = {};
     result.name = name;
     result.combatSkill = combatSkill;
-    result.endurance = endurance;
+    result.currentEndurance = endurance;
+	result.maxEndurance = endurance;
     result.wealth = wealth;
     return result;
 }
@@ -557,8 +790,6 @@ function doButton(panel, text)
 {
     var result = false;
     
-    defaultFont();
-
     var style = 'default';
     var size = new v2(context.measureText(text).width, lineHeight);
     if(panel.AtX <= mousePosition.x && mousePosition.x <= (panel.AtX + size.x) &&
@@ -585,15 +816,21 @@ function nextRow(panel, rowHeight)
 
 function doText(panel, text, style)
 {
-    defaultFont();
+	drawText(panel.AtX, panel.AtY, text, style);
+    panel.AtX += context.measureText(text).width;
+}
+
+function drawText(x, y, text, style)
+{
+	var oldFillStyle = context.fillStyle;
     if(style == 'highlight')
     {
         context.fillStyle = 'blue';
     }
     //Note(ian): Javascript is draws text up instead of down from the position so we add lineHeight.
-    context.fillText(text, panel.AtX, panel.AtY + lineHeight);
+    context.fillText(text, x, y + lineHeight);
     //drawCircle(2, panel.AtX, panel.AtY, '#000000')
-    panel.AtX += context.measureText(text).width;
+	context.fillStyle = oldFillStyle;
 }
 
 function drawWrappedText(panel, text)
@@ -643,6 +880,15 @@ function drawCircle(radius, x, y, color)
     context.arc(x, y, radius, 0, 2 * Math.PI);
     context.fillStyle = color;
     context.fill();
+}
+
+function drawLine(x1, y1, x2, y2, color)
+{
+	context.beginPath();
+	context.moveTo(x1,y1);
+	context.lineTo(x2, y2);
+	context.strokeStyle = color;
+	context.stroke();
 }
 
 function isOnEvenTile()
@@ -721,6 +967,7 @@ function setEvent(letter, number)
             state.type = 'combat';
             state.eventState.playerStrikesFirst = true;
             var check = d6();
+			// Todo(ian): Is this check correct or should it be party.length?
             if(party[0].length < check)
             {
                 state.eventState.surpriseAdvantage = 'player';
@@ -833,6 +1080,20 @@ function setEvent(letter, number)
     {
         window.alert("Event not handled " + letter + number);
     }
+}
+
+function textStyle(name, size, color)
+{
+	this.name = name;
+	this.size = size;
+	this.color = color;
+}
+
+function setTextStyle(textStyle)
+{
+	var newFont = textStyle.size + 'pt ' + textStyle.name;
+    context.font = newFont;
+    context.fillStyle = textStyle.color;
 }
 
 //
@@ -1022,6 +1283,16 @@ function angleToV2(a)
 //
 // == TABLES
 //
+
+// Note(ian): This is supposed to have a -1 entry so we cheat and push everything up by one.
+// -1,3,5,8,11 One wound
+// 10,12,13,17 Two wounds
+// 14 Three wounds
+// 16,18,19 Five wounds
+// 20 Six wounds
+//               -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+var woundTable = [1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0,  2,  1,  2,  2,  3,  0,  5,  2,  5,  5,  6];
+
 
 // 0 - Farmland
 // 1 - Countryside
