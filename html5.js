@@ -1,3 +1,17 @@
+/* Task List
+- bonus merc encounter if north of the river.
+- start putting in the travel encounters
+- road travel and getting lostSave
+- river crossings, getting lost, and peing in partial positions.
+- combat with more player characters.
+- negotiate and evade
+- combat surprise round
+- bribe rules
+- 2 hex movement if mounted.  3 hex flying movement.
+- sleeping / nighttime animation
+- Replace this with a measurement of the height using the current font.
+*/
+
 function mapInfo()
 {
 	this.widthInTiles = 20;
@@ -26,7 +40,10 @@ var party = [];
 var playerTilePosition = new v2(0, 0);
 var playerDrawOffset = new v2(-8, -25);
 
-var state;
+var combat = {};
+resetCombatState();
+var activity = {}
+clearActivity();
 
 var ui = new Object();
 ui.interacting = null;
@@ -39,15 +56,22 @@ var debugText = [debugTextMax];
 window.onload = initialize;
 window.addEventListener("keypress", onKeyPress, true);
 
-// Todo(ian): Replace this with a measurement of the height using the current font.
 var lineHeight = 18;
+var todaysActionSelected = false;
+var todaysMercenaryCheck = false;
 
+var debugDisplay = false;
 var defaultTextStyle = new textStyle('Courier New', 14, 'black');
 var debugTextStyle = new textStyle('Lucida Console', 10, '#000000ff');
 
-// Todo(ian): 2 hex movement if mounted.  3 hex flying movement.
-// Todo(ian): click on tile to move, highlight movement options.
-// Todo(ian): sleeping / nighttime animation
+function clearActivity()
+{
+	activity.canEnd = false;
+	activity.active = false;
+	activity.text = [];
+	activity.options = [];
+	activity.characters = [];
+}
 
 function addDebugText(text)
 {
@@ -78,6 +102,9 @@ function initialize()
 
 function resetGame()
 {
+	clearActivity();
+	resetCombatState();
+	
 	party.length = 0;
     party.push({});
     party[0].name = "Cal Arath";
@@ -125,10 +152,10 @@ function resetGame()
         playerTilePosition.x = 18;
         playerTilePosition.y = 0;
     }
-    
-    state = new Object();
-    state.type = 'event';
-    state.eventNumber = 001;
+   
+    todaysActionSelected = false;
+	todaysMercenaryCheck = false;
+	setEvent('e', 001);
 }
 
 function loadImagesThenStart()
@@ -162,6 +189,19 @@ function isValidTilePosition(x, y)
     return x >= 0 && x < map.widthInTiles - 1 && y >= 0 && y < map.heightInTiles - 1;
 }
 
+function conciousPlayerCount()
+{
+	var numConciousPlayers = 0;
+	for (var partyIndex = 0; partyIndex < party.length; partyIndex++)
+	{
+		if (party[partyIndex].currentEndurance > 1)
+		{
+			numConciousPlayers++;
+		}
+	}
+	return numConciousPlayers;
+}
+
 function drawAndUpdate()
 {
     keysPressed = nextKeysPressed;
@@ -169,11 +209,312 @@ function drawAndUpdate()
     mouseClicked = nextMouseClicked;
     nextMouseClicked = false;
     
+	if (keysPressed[tildeKeyCode])
+	{
+		debugDisplay = !debugDisplay;
+	}
+	
     context.clearRect(0, 0, canvas.width, canvas.height);
-    
-    if(state.type == 'none')
+		
+	if (debugDisplay)
+	{
+        setTextStyle(debugTextStyle);
+        var y = 12;
+        for(var debugIndex = debugText.length - 1;
+            debugIndex >= 0;
+            debugIndex--)
+        {
+            context.fillText(debugText[debugIndex], 10, y);
+            y += 12;
+        }
+		setTextStyle(defaultTextStyle);   
+	}
+    else if(conciousPlayerCount() == 0)
     {
-        // TODO(ian): Do click to move.
+		drawText(10, 10, 'You died, press Enter to start a new game', 'default');
+		if (keysPressed[enterKeyCode])
+		{
+			resetGame();
+		}
+	}
+    else if(combat.active)
+    {
+		var overflowIsEnemies = combat.combatants.length > party.length;
+		var numArenas = Math.min(combat.combatants.length, party.length);
+		if (!combat.combatInitialized)
+		{
+			combat.combatInitialized = true;
+			
+			for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+			{
+				var arena = {};
+				arena.unitList = [];
+				arena.unitList[0] = party[arenaIndex];
+				arena.unitList[1] = combat.combatants[arenaIndex];
+				combat.combatArenas[arenaIndex] = arena;
+			}
+			var maxUnits = Math.max(combat.combatants.length, party.length);
+			var arenaIndex = 0;
+			for (var unitIndex = numArenas; unitIndex < maxUnits; unitIndex++)
+			{
+				var arena = combat.combatArenas[arenaIndex];
+				if (numArenas < party.length)
+				{
+					arena.unitList[arena.unitList.length] = party[unitIndex];
+				}
+				else
+				{
+					arena.unitList[arena.unitList.length] = combat.combatants[unitIndex];
+				}
+				
+				arenaIndex++;
+				arenaIndex %= numArenas;
+			}
+		}
+		
+		var arenaSectionSize = new v2(canvas.width / numArenas, canvas.height / 4);
+		
+		for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+		{
+			var arena = combat.combatArenas[arenaIndex];
+			for (var unitIndex = 0; unitIndex < arena.unitList.length; unitIndex++)
+			{
+				var unit = arena.unitList[unitIndex];
+				
+				var verticalSectionIndex = 3;
+				if (unitIndex == 0)
+				{
+					verticalSectionIndex = 2;
+				}
+				else if (unitIndex == 1)
+				{
+					verticalSectionIndex = 1;
+				}
+				else if (overflowIsEnemies)
+				{
+					verticalSectionIndex = 0;
+				}
+				
+				var topLeft = new v2(arenaIndex * arenaSectionSize.x, verticalSectionIndex * arenaSectionSize.y);
+				var bottomRight = new v2(topLeft.x + arenaSectionSize.x, topLeft.y + arenaSectionSize.y);
+				if (unitIndex > 1)
+				{
+					var numOverflowUnits = arena.unitList.length - 2;
+					var overflowWidth = arenaSectionSize.x / numOverflowUnits;
+					var overflowIndex = unitIndex - 2;
+					topLeft.x += overflowWidth * overflowIndex;
+					bottomRight.x -= overflowWidth * (numOverflowUnits - overflowIndex - 1);
+				}
+				
+				//drawLine(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y, 'red');
+				
+				var name = unit.name;
+				var textPosition = v2Copy(topLeft);
+				var unitMaxWidth = bottomRight.x - topLeft.x;
+				var nameStyle = new textStyle(defaultTextStyle.name, defaultTextStyle.size, defaultTextStyle.color);
+				var textWidth = context.measureText(name).width;
+				for (; textWidth > unitMaxWidth; )
+				{
+					nameStyle.size--;
+					setTextStyle(nameStyle);
+					textWidth = context.measureText(name).width;
+				}
+				textPosition.x += (unitMaxWidth - textWidth) / 2.0;
+				drawText(textPosition.x, textPosition.y, name, 'default');
+				setTextStyle(defaultTextStyle);
+				textPosition.y += lineHeight;
+				drawText(textPosition.x, textPosition.y, unit.combatSkill);
+				textPosition.y += lineHeight;
+				drawText(textPosition.x, textPosition.y, unit.currentEndurance + '/' + unit.maxEndurance, 'default');
+			}
+		}
+		
+		// Apply the combat.
+		if (keysPressed[enterKeyCode])
+		{
+			for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+			{
+				var arena = combat.combatArenas[arenaIndex];
+				for (var attackTurn = 0; attackTurn <= 1; attackTurn++)
+				{
+					var overflowAttackTurn;
+					var playerAttackTurn;
+					var victim;
+					var victimIndex = attackTurn;
+					if (combat.playerStrikesFirst)
+					{
+						victimIndex++;
+					}
+					victimIndex = victimIndex % 2;
+					victim = arena.unitList[victimIndex];
+					if (combat.playerStrikesFirst)
+					{
+						playerAttackTurn = 0;
+						if (overflowIsEnemies)
+						{
+							overflowAttackTurn = 1;
+						}
+						else
+						{
+							overflowAttackTurn = 0;
+						}
+					}
+					else 
+					{
+						playerAttackTurn = 1;
+						if (overflowIsEnemies)
+						{
+							overflowAttackTurn = 0;
+						}
+						else
+						{
+							overflowAttackTurn = 1;
+						}
+					}
+					for (var unitIndex = 0; unitIndex < arena.unitList.length; unitIndex++)
+					{
+						var unit = arena.unitList[unitIndex];
+						
+						if(unit.currentEndurance > 1 &&
+							((unitIndex == 0 && attackTurn == playerAttackTurn) ||
+						     (unitIndex == 1 && attackTurn != playerAttackTurn) ||
+						     (unitIndex > 1 && attackTurn == overflowAttackTurn)))
+					   {
+						    var attackValue = unit.combatSkill - victim.combatSkill;
+						    // +2 Target of strike has wounds equalling half or more his endurance
+							if (victim.currentEndurance <= (victim.maxEndurance / 2))
+							{
+								attackValue += 2;
+							}
+							// -1 Striker has one or more wounds
+							if (unit.currentEndurance != unit.maxEndurance)
+							{
+								attackValue--;
+							}
+							// -1 Striker has wounds equalling half or more his endurance (in addition to the above)
+							if (unit.currentEndurance <= (unit.maxEndurance / 2))
+							{
+								attackValue--;
+							}
+							attackValue += d6() + d6();
+							
+							// Note(ian): Because the wound table has a -1 entry we had to shift it up 1 so it could start at 0.
+							attackValue++;
+							
+							var wounds = 0;
+							if (attackValue >= 0 && attackValue < woundTable.length)
+							{
+								wounds = woundTable[attackValue];
+							}
+							
+							victim.currentEndurance -= wounds;
+							
+							// Todo(ian): Surprise, Escape, and Routs.
+					   }
+					}	
+				}
+			}
+			
+			// Evaluate the combat state and arena unit positions.
+			var numConciousEnemies = 0;
+			for (var enemyIndex = 0; enemyIndex < combat.combatants.length; enemyIndex++)
+			{
+				if (combat.combatants[enemyIndex].currentEndurance > 1)
+				{
+					numConciousEnemies++;
+				}
+			}
+			
+			if (conciousPlayerCount() == 0)
+			{
+			}
+			else if (numConciousEnemies == 0)
+			{
+				var goldGained = 0;
+				for (var enemyIndex = 0; enemyIndex < combat.combatants.length; enemyIndex++)
+				{
+					var enemy = combat.combatants[enemyIndex];
+					goldGained += getWealthFromCode(enemy.wealth);
+				}
+				gold += goldGained;
+				resetCombatState();
+				clearActivity();
+			}
+			else
+			{
+				// Todo(ian): Highlight arenas in red if they have not valid targets (and prevent processing the round);
+				// Todo(ian): make sure the max number of possible arenas is being used.
+				// Todo(ian): Give the players the ability to drag and drop units.
+				for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
+				{
+					var arena = combat.combatArenas[arenaIndex];
+					var enemy = arena.unitList[1];
+					if (overflowIsEnemies &&
+						enemy.currentEndurance <= 1)
+					{
+						var matchFound = false;
+						for (var unitIndex = 2; unitIndex < arena.unitList.length && !matchFound; unitIndex++)
+						{
+							var unit = arena.unitList[unitIndex];
+							if (unit.currentEndurance > 1)
+							{
+								matchFound = true;
+								var temp = arena.unitList[1];
+								arena.unitList[1] = arena.unitList[unitIndex];
+								arena.unitList[unitIndex] = temp;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+    else if(activity.active)
+    {
+        var panel = new Object();
+        panel.AtY = 0;
+        panel.AtX = 0;
+        
+		drawWrappedText(panel, activity.text, canvas.width);
+		
+		for (var optionIndex = 0; optionIndex < activity.options.length; optionIndex++)
+		{
+			var option = activity.options[optionIndex];
+			var clicked = doButton(panel, option.text);
+			if (clicked)
+			{				
+				if (option.type == ActivityOptionType.EndActivity)
+				{
+					clearActivity();
+				}
+				else if (option.type == ActivityOptionType.Random)
+				{
+					processOption(option.outcomes);
+				}
+			}
+		}
+		
+		if(activity.canEnd && continueButtonPressed())
+		{
+			clearActivity();
+		}
+    }
+    else if (todaysActionSelected)
+	{
+		if (!todaysMercenaryCheck &&
+			(playerTilePosition.y == 0 && playerTilePosition.x != 13) ||
+			(playerTilePosition.y == 1 && (playerTilePosition.x == 2 || playerTilePosition.x == 4)))
+		{
+			todaysMercenaryCheck = true;
+			setEvent('e', 2);
+		}
+		else
+		{
+			eveningUpkeep();
+		}
+	}
+    else 
+	{
         var topLeftMapPosition = v2Add(map.tile1Center, v2Hadamard(map.tileSize, playerTilePosition));
         if(!isOnEvenTile())
         {
@@ -252,10 +593,20 @@ function drawAndUpdate()
                 var tile = moveTiles[tileIndex];
                 if(tile.x >= 0 && tile.x < map.widthInTiles - 1 && tile.y >= 0 && tile.y < map.heightInTiles - 1)
                 {
-                    if(v2Equals(tile, hotTile))
+                    if(!v2Equals(tile, hotTile))
                     {
+                        var center = getDrawLocationFromTile(firstTileCenter, tile, new v2(images[tileHighlightGreyFileName].width, images[tileHighlightGreyFileName].height), new v2(0, 0));
+                        context.drawImage(images[tileHighlightGreyFileName], center.x, center.y);
+                    }
+					else
+					{
+						var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightYellowFileName].width, images[tileHighlightYellowFileName].height), new v2(0, 0));
+						context.drawImage(images[tileHighlightYellowFileName], center.x, center.y);
+						
 						if(mouseClicked)
 						{
+							todaysActionSelected = true;
+							
 							// 0 - Farmland
 							// 1 - Countryside
 							// 2 - Forset
@@ -286,16 +637,7 @@ function drawAndUpdate()
 								terrainEvent(newTerrainType);
 								playerTilePosition = hotTile;
 							}
-						
-							eveningUpkeep();
 						}
-						var center = getDrawLocationFromTile(firstTileCenter, hotTile, new v2(images[tileHighlightYellowFileName].width, images[tileHighlightYellowFileName].height), new v2(0, 0));
-						context.drawImage(images[tileHighlightYellowFileName], center.x, center.y);
-                    }
-                    else
-                    {
-                        var center = getDrawLocationFromTile(firstTileCenter, tile, new v2(images[tileHighlightGreyFileName].width, images[tileHighlightGreyFileName].height), new v2(0, 0));
-                        context.drawImage(images[tileHighlightGreyFileName], center.x, center.y);
                     }
                 }
             }
@@ -303,25 +645,26 @@ function drawAndUpdate()
         
         var playerPosition = getDrawLocationFromTile(firstTileCenter, playerTilePosition, new v2(images[playerFileName].width, images[playerFileName].height), playerDrawOffset);
         context.drawImage(images[playerFileName], playerPosition.x, playerPosition.y);
-        
+        		
         // Todo(ian): Draw these on the canvas.
         document.getElementById('remainingFood').innerHTML = food;
         document.getElementById('hitPoints').innerHTML = party[0].currentEndurance + "/" + party[0].maxEndurance;
         document.getElementById('gold').innerHTML = gold;
-        
-        setTextStyle(debugTextStyle);
-        var y = 12;
-        for(var debugIndex = debugText.length - 1;
-            debugIndex >= 0;
-            debugIndex--)
-        {
-            context.fillText(debugText[debugIndex], 10, y);
-            y += 12;
-        }
-		setTextStyle(defaultTextStyle);
-        
-        //Todo(ian): Mercenaries of north of the river!
-        
+        		
+		// for(var y = 0; y < terrain.length; y++)
+        // {
+            // for(var x = 0; x < terrain[y].length; x++)
+            // {
+				// if ((y == 0 && x != 13) ||
+					// (y == 1 && (x == 2 || x == 4)))
+				// {
+					
+					// //var center = getDrawLocationFromTile(firstTileCenter, new v2(x, y), new v2(0, 0), new v2(0, 0));
+					// //drawCircle(10, center.x, center.y, '#a07a39')
+				// }
+			// }
+		// }
+		
         /*for(var y = 0; y < terrain.length; y++)
         {
             for(var x = 0; x < terrain[y].length; x++)
@@ -364,390 +707,37 @@ function drawAndUpdate()
             }
         }*/
     }
-    else if(state.type == 'event')
-    {
-        var panel = new Object();
-        panel.AtY = 0;
-        panel.AtX = 0;
-        
-        if(state.eventNumber == 1)
-        {
-            var text = [];
-            text[0] =
-"Evil events have overtaken your Northlands Kingdom. Your father, the old king, is dead - assassinated by rivals \
-to the throne. These usurpers now hold the palace with their mercenary royal guard. You have escaped, and \
-must collect 500 gold pieces to raise a force to smash them and retake your heritage. Furthermore, the \
-usurpers have powerful friends overseas. If you can't return to take them out in ten weeks, their allies will arm \
-and you will lose your kingdom forever."
-            text[1] =
-"To escape the mercenary and royal guard, your loyal body servant Ogab smuggled you into a merchant \
-caravan to the southern border. \
-Now, at dawn you roll out of the merchant wagons into a ditch, dust off your clothes, loosen your swordbelt, and \
-get ready to start the first day of your adventure."
-            text[2] =
-"Important Note: if you finish actions for a day on any hex north of the Tragoth River, the mercenary royal \
-guardsmen may find you."; 
-            drawWrappedText(null, text, canvas.width);
-            
-            if(continueButtonPressed())
-            {
-                state.eventNumber = 2;
-                state.eventInitialized = false;
-            }
-        }
-        else if(state.eventNumber == 2)
-        {
-            var bypassEvent = false;
-            if(!state.eventInitialized)
-            {
-                state.eventInitialized = true;
-                var save = d6() - 3;
-                addDebugText("Event 002 save " + save);
-                if((playerTilePosition.x == 0 && playerTilePosition.y == 0) || (playerTilePosition.x == 14 && playerTilePosition.y == 0))
-                {
-                    save += 1;
-                    addDebugText("Event 002 save++");
-                }
-                
-                if(save <= 0)
-                {
-                    state.type = 'none';
-                    bypassEvent = true;
-                    addDebugText("Event 002 avoided.");
-                }
-                else
-                {
-                    state.eventState = {};            
-                    state.eventState.playerStrikesFirst = true;
-                    state.eventState.surpriseAdvantage = 'none';
-                    state.eventState.bribe = 0;
-                    state.eventState.combatants = [];
-					state.eventState.combatArenas = [];
-					state.eventState.combatInitialized = false;
-                    var numMen = d6();
-                    for(var i = 0;
-                        i < numMen;
-                        i++)
-                    {
-                        state.eventState.combatants[i] = getCombatant('Mercenary Royal Guardsmen', 5, 4, 4);
-                    }
-                }
-            }
+}
 
-            if(!bypassEvent)
-            {         
-                var text = [];
-                text[0] = "Mercenary Royal Guardsmen";
-				text[1] = state.eventState.combatants.length + " mercenary thugs, dressed by the usurpers as their royal guardsmen, are riding toward you! Each of which has a combat skill 5, endurance 4, wealth 4.";
+function resetCombatState()
+{	          
+	combat.active = false;
+	combat.playerStrikesFirst = true;
+	combat.surpriseAdvantage = 'none';
+	combat.bribe = 0;
+	combat.combatants = [];
+	combat.combatArenas = [];
+	combat.combatInitialized = false;
+}
 
-                drawWrappedText(panel, text, canvas.width);
-
-                var optionMatrix = null;
-                if(doButton(panel, 'Negotiate'))
-                {
-                    optionMatrix = [
-                        ['r', 327],
-                        ['r', 328],
-                        ['r', 329],
-                        ['r', 323, 15],
-                        ['r', 323, 25],
-                        ['r', 306]
-                    ];
-                }
-                if(doButton(panel, 'Evade'))
-                {
-                    optionMatrix = [
-                        ['r', 307],
-                        ['r', 306],
-                        ['r', 304],
-                        ['r', 318],
-                        ['r', 311],
-                        ['r', 312],
-                        ['r', 312]
-                    ];
-                    //Todo(ian): If your party all winged mounts, you can use a flying escape r313 instead of rolling for the evade option; if your entire party has mounts, add one (+1) to die roll. You can abandon un-mounted members of the party for this.    
-                }
-                if(doButton(panel, 'Fight'))
-                {
-                    optionMatrix = [
-                        ['r', 300],
-                        ['r', 301],
-                        ['r', 303],
-                        ['r', 304],
-                        ['r', 305],
-                        ['r', 306]
-                    ];
-                }
-                
-                if(optionMatrix != null)
-                {                
-                    var optionIndex = d6() - 1;
-                    var selectedOption = optionMatrix[optionIndex];
-                    if(selectedOption.length == 3)
-                    {
-                        state.eventState.bribe = selectedOption[2];
-                    }
-                    setEvent(selectedOption[0], selectedOption[1]);
-                }
-            }
-        }
-        else
-        {
-            var text = [];
-            text[0] = "Event " + state.eventNumber + " not found.";
-            drawWrappedText(null, text, canvas.width);
-            if(continueButtonPressed())
-            {
-                state.type = 'none';
-            }
-        }
-    }
-    else if(state.type == 'combat')
-    {
-		var overflowIsEnemies = state.eventState.combatants.length > party.length;
-		var numArenas = Math.min(state.eventState.combatants.length, party.length);
-		if (!state.eventState.combatInitialized)
+function processOption(optionMatrix)
+{
+	if(optionMatrix != null)
+	{                
+		var optionIndex = d6() - 1;
+		var selectedOption = optionMatrix[optionIndex];
+		if(selectedOption.length == 3)
 		{
-			state.eventState.combatInitialized = true;
-			
-			for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
-			{
-				var arena = {};
-				arena.unitList = [];
-				arena.unitList[0] = party[arenaIndex];
-				arena.unitList[1] = state.eventState.combatants[arenaIndex];
-				state.eventState.combatArenas[arenaIndex] = arena;
-			}
-			var maxUnits = Math.max(state.eventState.combatants.length, party.length);
-			var arenaIndex = 0;
-			for (var unitIndex = numArenas; unitIndex < maxUnits; unitIndex++)
-			{
-				var arena = state.eventState.combatArenas[arenaIndex];
-				if (numArenas < party.length)
-				{
-					arena.unitList[arena.unitList.length] = party[unitIndex];
-				}
-				else
-				{
-					arena.unitList[arena.unitList.length] = state.eventState.combatants[unitIndex];
-				}
-				
-				arenaIndex++;
-				arenaIndex %= numArenas;
-			}
+			combat.bribe = selectedOption[2];
 		}
-		
-		var arenaSectionSize = new v2(canvas.width / numArenas, canvas.height / 4);
-		
-		for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
-		{
-			var arena = state.eventState.combatArenas[arenaIndex];
-			for (var unitIndex = 0; unitIndex < arena.unitList.length; unitIndex++)
-			{
-				var unit = arena.unitList[unitIndex];
-				
-				var verticalSectionIndex = 3;
-				if (unitIndex == 0)
-				{
-					verticalSectionIndex = 2;
-				}
-				else if (unitIndex == 1)
-				{
-					verticalSectionIndex = 1;
-				}
-				else if (overflowIsEnemies)
-				{
-					verticalSectionIndex = 0;
-				}
-				
-				var topLeft = new v2(arenaIndex * arenaSectionSize.x, verticalSectionIndex * arenaSectionSize.y);
-				var bottomRight = new v2(topLeft.x + arenaSectionSize.x, topLeft.y + arenaSectionSize.y);
-				if (unitIndex > 1)
-				{
-					var numOverflowUnits = arena.unitList.length - 2;
-					var overflowWidth = arenaSectionSize.x / numOverflowUnits;
-					var overflowIndex = unitIndex - 2;
-					topLeft.x += overflowWidth * overflowIndex;
-					bottomRight.x -= overflowWidth * (numOverflowUnits - overflowIndex - 1);
-				}
-				
-				//drawLine(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y, 'red');
-				
-				var name = unit.name;
-				var textPosition = v2Copy(topLeft);
-				var unitMaxWidth = bottomRight.x - topLeft.x;
-				var nameStyle = new textStyle(defaultTextStyle.name, defaultTextStyle.size, defaultTextStyle.color);
-				var textWidth = context.measureText(name).width;
-				for (; textWidth > unitMaxWidth; )
-				{
-					nameStyle.size--;
-					setTextStyle(nameStyle);
-					textWidth = context.measureText(name).width;
-				}
-				textPosition.x += (unitMaxWidth - textWidth) / 2.0;
-				drawText(textPosition.x, textPosition.y, name, 'default');
-				setTextStyle(defaultTextStyle);
-				textPosition.y += lineHeight;
-				drawText(textPosition.x, textPosition.y, unit.combatSkill);
-				textPosition.y += lineHeight;
-				drawText(textPosition.x, textPosition.y, unit.currentEndurance + '/' + unit.maxEndurance, 'default');
-			}
-		}
-		
-		// Apply the combat.
-		if (keysPressed[enterKeyCode])
-		{
-			for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
-			{
-				var arena = state.eventState.combatArenas[arenaIndex];
-				for (var attackTurn = 0; attackTurn <= 1; attackTurn++)
-				{
-					var overflowAttackTurn;
-					var playerAttackTurn;
-					var victim;
-					var victimIndex = attackTurn;
-					if (state.eventState.playerStrikesFirst)
-					{
-						victimIndex++;
-					}
-					victimIndex = victimIndex % 2;
-					victim = arena.unitList[victimIndex];
-					if (state.eventState.playerStrikesFirst)
-					{
-						playerAttackTurn = 0;
-						if (overflowIsEnemies)
-						{
-							overflowAttackTurn = 1;
-						}
-						else
-						{
-							overflowAttackTurn = 0;
-						}
-					}
-					else 
-					{
-						playerAttackTurn = 1;
-						if (overflowIsEnemies)
-						{
-							overflowAttackTurn = 0;
-						}
-						else
-						{
-							overflowAttackTurn = 1;
-						}
-					}
-					for (var unitIndex = 0; unitIndex < arena.unitList.length; unitIndex++)
-					{
-						var unit = arena.unitList[unitIndex];
-						
-						if(unit.currentEndurance > 1 &&
-							((unitIndex == 0 && attackTurn == playerAttackTurn) ||
-						     (unitIndex == 1 && attackTurn != playerAttackTurn) ||
-						     (unitIndex > 1 && attackTurn == overflowAttackTurn)))
-					   {
-						    var attackValue = unit.combatSkill - victim.combatSkill;
-						    // +2 Target of strike has wounds equalling half or more his endurance
-							if (victim.currentEndurance <= (victim.maxEndurance / 2))
-							{
-								attackValue += 2;
-							}
-							// -1 Striker has one or more wounds
-							if (unit.currentEndurance != unit.maxEndurance)
-							{
-								attackValue--;
-							}
-							// -1 Striker has wounds equalling half or more his endurance (in addition to the above)
-							if (unit.currentEndurance <= (unit.maxEndurance / 2))
-							{
-								attackValue--;
-							}
-							attackValue += d6() + d6();
-							
-							// Note(ian): Because the wound table has a -1 entry we had to shift it up 1 so it could start at 0.
-							attackValue++;
-							
-							var wounds = 0;
-							if (attackValue >= 0 && attackValue < woundTable.length)
-							{
-								wounds = woundTable[attackValue];
-							}
-							
-							victim.currentEndurance -= wounds;
-							
-							// Todo(ian): Surprise, Escape, and Routs.
-					   }
-					}	
-				}
-			}
-			
-			// Evaluate the combat state and arena unit positions.
-			var numLivingPlayers = 0;
-			for (var partyIndex = 0; partyIndex < party.length; partyIndex++)
-			{
-				if (party[partyIndex].currentEndurance > 0)
-				{
-					numLivingPlayers++;
-				}
-			}
-			var numLivingEnemies = 0;
-			for (var enemyIndex = 0; enemyIndex < state.eventState.combatants.length; enemyIndex++)
-			{
-				if (state.eventState.combatants[enemyIndex].currentEndurance > 0)
-				{
-					numLivingEnemies++;
-				}
-			}
-			
-			if (numLivingPlayers == 0)
-			{
-				state.type = 'gameOver';
-			}
-			else if (numLivingEnemies == 0)
-			{
-				
-			}
-			else
-			{
-				// Todo(ian): Highlight areas in red if they have not valid targets (and prevent processing the round);
-				// Todo(ian): make sure the max number of possible arenas is being used.
-				// Todo(ian): Give the players the ability to drag and drop units.
-				for (var arenaIndex = 0; arenaIndex < numArenas; arenaIndex++)
-				{
-					var arena = state.eventState.combatArenas[arenaIndex];
-					var enemy = arena.unitList[1];
-					if (overflowIsEnemies &&
-						enemy.currentEndurance <= 1)
-					{
-						var matchFound = false;
-						for (var unitIndex = 2; unitIndex < arena.unitList.length && !matchFound; unitIndex++)
-						{
-							var unit = arena.unitList[unitIndex];
-							if (unit.currentEndurance > 1)
-							{
-								matchFound = true;
-								var temp = arena.unitList[1];
-								arena.unitList[1] = arena.unitList[unitIndex];
-								arena.unitList[unitIndex] = temp;
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-    else if(state.type == 'gameOver')
-    {
-		drawText(10, 10, 'You died, press Enter to start a new game', 'default');
-		if (keysPressed[enterKeyCode])
-		{
-			resetGame();
-		}
+		setEvent(selectedOption[0], selectedOption[1]);
 	}
 }
 
-
 function eveningUpkeep()
 {
+	todaysActionSelected = false;
+	todaysMercenaryCheck = false;
     addDebugText("End Of Day");
     // TODO(ian): Advance day counter (70 days total)
     
@@ -758,7 +748,7 @@ function eveningUpkeep()
     }
 }
     
-function getCombatant(name, combatSkill, endurance, wealth)
+function getCharacter(name, combatSkill, endurance, wealth)
 {
     var result = {};
     result.name = name;
@@ -938,93 +928,102 @@ function setEvent(letter, number)
         }
         else if(number == 300)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = true;
-            state.eventState.surpriseAdvantage = 'player';
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = true;
+            combat.surpriseAdvantage = 'player';
         }
         else if(number == 301)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = true;
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = true;
             var check = d6();
             if(party[0].witAndWiles >= check)
             {
-                state.eventState.surpriseAdvantage = 'player';
+                combat.surpriseAdvantage = 'player';
             }
         }
         else if(number == 302)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = true;
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = true;
             var check = d6();
             if(party[0].witAndWiles > check)
             {
-                state.eventState.surpriseAdvantage = 'player';
+                combat.surpriseAdvantage = 'player';
             }
         }
         else if(number == 303)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = true;
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = true;
             var check = d6();
 			// Todo(ian): Is this check correct or should it be party.length?
             if(party[0].length < check)
             {
-                state.eventState.surpriseAdvantage = 'player';
+                combat.surpriseAdvantage = 'player';
             }
         }
         else if(number == 304)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = true;
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = true;
         }
         else if(number == 305)
         {
-            state.type = 'combat';
+			combat.active = true;
+			combat.combatants = activity.characters;
             var check = d6();
-            state.eventState.playerStrikesFirst = party[0].witAndWiles >= check;
+            combat.playerStrikesFirst = party[0].witAndWiles >= check;
         }
         else if(number == 306)
         {
-            state.type = 'combat';
+			combat.active = true;
+			combat.combatants = activity.characters;
             var check = d6();
-            state.eventState.playerStrikesFirst = party[0].witAndWiles > check;
+            combat.playerStrikesFirst = party[0].witAndWiles > check;
         }
         else if(number == 307)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = false;
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = false;
         }
         else if(number == 308)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = false;
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = false;
             var check = d6();
             if(party[0].witAndWiles < check)
             {
-                state.eventState.surpriseAdvantage = 'enemy';
+                combat.surpriseAdvantage = 'enemy';
             }
         }
         else if(number == 309)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = false;
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = false;
             var check = d6();
             if(party[0].witAndWiles <= check)
             {
-                state.eventState.surpriseAdvantage = 'enemy';
+                combat.surpriseAdvantage = 'enemy';
             }
         }
         else if(number == 310)
         {
-            state.type = 'combat';
-            state.eventState.playerStrikesFirst = false;
-            state.eventState.surpriseAdvantage = 'enemy';
+			combat.active = true;
+			combat.combatants = activity.characters;
+            combat.playerStrikesFirst = false;
+            combat.surpriseAdvantage = 'enemy';
         }
         else if(number == 311)
-        {
-            state.type = 'none';
-            
+        {            
             var direction;
             var newTilePosition
             do
@@ -1059,13 +1058,88 @@ function setEvent(letter, number)
             
             playerTilePosition = newTilePosition;
             
-            eveningUpkeep();
+			clearActivity();
         }
         else if(number == 325)
         {
-            // Pass
-            eveningUpkeep();
+            activity.text[activity.text.length] = "Characters lose interest in your party, encounter and event ends now.";
+			activity.canEnd = true;
         }
+		else if (number == 336)
+		{
+			/*r336 Plead Comrades
+			You try to talk the character(s) into joining your party, as they seem sympathetic and interested. Roll one die, if
+			your wit & wiles equals or exceeds the roll, they will join as followers; otherwise they leave and the event ends.*/
+        }
+		else if (number == 337)
+		{
+			/*r337 Plead Comrades
+			The character(s) encountered look unsavory, but willing to talk - you try to convince them to join your party. Roll
+			one die, if your wit & wiles exceed the roll, they join as followers. Otherwise, roll one die again: 1-r325; 2-r330;
+			3-r340; 4,5-r341; 6-r342.*/
+			
+			/*r338 Convince Hirelings
+			Character(s) encountered look dubiously at you, but you try to convince them to join your party as henchmen.
+			Roll one die; if your wit & wiles equals or exceeds the die roll, they will join your party as henchmen. You must
+			pay them one gold piece per day if your wit & wiles exceed the die roll, or two gold pieces per day if your wit &
+			wiles equaled the die roll. Today's pay must be given to each immediately. If more than one is encountered, you
+			can hire some instead of all if you desire. Those who are not hired, or if you fail to convince them to join will
+			pass by, ending the event.*/
+			
+			/*r339 Convince Hirelings
+			Character(s) encountered look askance at you, and will pass you by (event ends) unless you stop to talk.
+			If you stop to talk, you decide you should convince them to join your party as henchmen. Roll one die; if your wit
+			& wiles exceeds the die roll, they will join at 2 gold pieces per day, with today's pay due right now. You can hire
+			some instead of all if you desire.
+			If you stopped to talk, but failed to convince them to join as hirelings, roll one die to determine their attitude:
+			1,2,3-r325; 4,5,6-r330.*/
+			
+			/*r340 Looter
+			Character(s) encountered look like they are in need of money. You can let them pass (encounter ends) or try to
+			convince them to join you.
+			If you try to convince them, roll one die. If your wit & wiles equals or exceeds the die roll, they will join your
+			party. They will remain as long as they get an equal share in any new gold you acquire (i.e., each gets as least
+			as much as you). If you deny them their share, it is ^s if you failed to convince them to join, see below.
+			If you fail to convince them to join (or later deny them an equal share in gold) they may become hostile, roll one
+			die:
+			1,2 They attack you personally in combat (r220), and have the first strike.
+			3,4 They attack your party in combat (r220); see r330 for situation.
+			5,6 They depart angry, but without fighting, event ends.*/
+			
+			/*r341 Conversation
+			In an extended period of talking, you gradually discover the interests and attitudes of the character(s) you
+			encountered. This takes a good deal of time, you cannot travel any further today, and any other daily actions
+			unfinished cannot be completed either. For the results of the talk, roll two dice
+			2 A hired assassin surprises you into combat (r220) and always strikes at you personally.
+			3 Bandits, who may surprise you, see r308.
+			4 Arrogant and surly, the conversation turns into an argument, r305.
+			5
+			Character(s) needs 10 gold now, r331; if they join, they will leave your party in a next town,
+			castle or temple you enter in any event.
+			6 Character(s) ask for 5 gold now and employment, see r332.
+			7 Character(s) willing to hire as henchmen, see r333.
+			8 Character(s) looking for fun and profit, see r338.
+			9 Character(s) fugitive from local justice, see r335.
+			10 Character(s) down on luck, looking for a turn in fortunes, see r336.
+			11 Character(s) obviously plundering mercenaries, see r340.
+			12 Character(s) discover a common cause with you; see r334.*/
+			
+			/*r342 General Inquiry
+			You are unsure of attitudes, and make some general inquiries to determine what these encountered characters
+			seem interested in. Roll two dice:
+			2 You unwittingly give insult; see r309.
+			3 You are forced into combat, unwillingly; see r330.
+			4 Character(s) interested in loot, see r340.
+			5 Character(s) attempt attack on you, see r306.
+			6 Character(s) uninterested in you, see r325.
+			7 Character(s) reveal themselves gradually; you can either talk further (see r341) or let them
+			pass (see r325).
+			8 Character(s) are for hire; see r333.
+			9 Character(s) may be for hire, see r339.
+			10 Character(s) may be sympathetic to your cause, see r337.
+			11 Character(s) uninterested, but may be for hire, see r338.
+			12 Character(s) aloof, but might consider joining you, see r336*/
+		}
         else
         {
             window.alert("Event not handled " + letter + number);
@@ -1073,13 +1147,140 @@ function setEvent(letter, number)
     }
     else if(letter == 'e')
     {
-        state.type = 'event';
-        state.eventNumber = number;
+		if(number == 1)
+        {
+			activity.active = true;
+			activity.canEnd = true;
+            activity.text[0] = "Evil events have overtaken your Northlands Kingdom. Your father, the old king, is dead - assassinated by rivals to the throne. These usurpers now hold the palace with their mercenary royal guard. You have escaped, and must collect 500 gold pieces to raise a force to smash them and retake your heritage. Furthermore, the usurpers have powerful friends overseas. If you can't return to take them out in ten weeks, their allies will arm and you will lose your kingdom forever."
+            activity.text[1] = "To escape the mercenary and royal guard, your loyal body servant Ogab smuggled you into a merchant caravan to the southern border. Now, at dawn you roll out of the merchant wagons into a ditch, dust off your clothes, loosen your swordbelt, and get ready to start the first day of your adventure."
+            activity.text[2] = "Important Note: if you finish actions for a day on any hex north of the Tragoth River, the mercenary royal guardsmen may find you.";
+        }
+        else if(number == 2)
+        {
+			var save = d6() - 3;
+			addDebugText("Event 002 save " + save);
+			if((playerTilePosition.x == 0 && playerTilePosition.y == 0) || (playerTilePosition.x == 14 && playerTilePosition.y == 0))
+			{
+				save += 1;
+				addDebugText("Event 002 save++");
+			}
+			
+			if(save <= 0)
+			{
+				var numMen = d6();
+				if (numMen == 0)
+				{
+					addDebugText("Diced 0 men");
+				}
+				else
+				{
+					for(var i = 0;
+						i < numMen;
+						i++)
+					{
+						activity.characters[i] = getCharacter('Mercenary Royal Guardsmen', 5, 4, 4);
+					}
+					
+					activity.active = true;
+					activity.text[0] = "Mercenary Royal Guardsmen";
+					activity.text[1] = activity.characters.length + " mercenary thugs, dressed by the usurpers as their royal guardsmen, are riding toward you! Each of which has a combat skill 5, endurance 4, wealth 4.";
+
+					addOptionRandomOutcome('Negotiate', [
+							['r', 327],
+							['r', 328],
+							['r', 329],
+							['r', 323, 15],
+							['r', 323, 25],
+							['r', 306]]);
+					addOptionRandomOutcome('Evade', [
+							['r', 307],
+							['r', 306],
+							['r', 304],
+							['r', 318],
+							['r', 311],
+							['r', 312],
+							['r', 312]]);
+					//Todo(ian): If your party all winged mounts, you can use a flying escape r313 instead of rolling for the evade option; if your entire party has mounts, add one (+1) to die roll. You can abandon un-mounted members of the party for this.    
+					addOptionRandomOutcome('Fight', [
+							['r', 300],
+							['r', 301],
+							['r', 303],
+							['r', 304],
+							['r', 305],
+							['r', 306]]);
+				}
+			}
+			else
+			{
+				addDebugText("Event 002 avoided.");
+			}
+        }
+		else if (number == 18)
+		{
+			//e018 Priest
+			activity.active = true;
+			activity.characters[0] = getCharacter('Priest', 3, 3, 25);
+			// todo(ian): draw the character instead of describing them
+			activity.text[0] = "You encounter a local Priest riding on a donkey (equivalent to a horse as a mount), with combat skill 3, endurance 3, wealth 25. He seems aloof and not disposed to conversation, but he may be afraid of you . . .";
+							
+			/*Todo(ian): Note: if you do fight the Priest in combat, and kill him, roll one die. If a 5 or 6 results, he casts upon you the
+			"mark of Cain". You must immediately roll once for each follower in your party, and any time the roll is greater
+			than your wit & wiles the follower will immediately desert you. In addition, all Monks and Priests in the future will
+			recognize the mark, and will not join your party. You can never attempt an audience (r211) with the high priest
+			of any temple marked on the map, but may with high priests of any secret unmarked temples that you find.
+			*/
+			
+			addOptionEndActivity('Let him pass');
+			addOptionRandomOutcome('Talk', [
+					['r', 336],
+					['r', 336],
+					['r', 337],
+					['r', 341],
+					['r', 342],
+					['r', 325]
+				]);
+			addOptionRandomOutcome('Fight'[
+					['r', 301],
+					['r', 303],
+					['r', 304],
+					['r', 305],
+					['r', 305],
+					['r', 306]
+				]);
+		}
+        else
+        {
+			addDebugText("Event not handled " + letter + number);
+        }
     }
-    else
-    {
-        window.alert("Event not handled " + letter + number);
-    }
+}
+
+ActivityOptionType = {
+    Random : 0,
+    EndActivity : 1
+}
+
+function addOptionEndActivity(text, outcomes)
+{
+	activity.options[activity.options.length] = new optionEndActivity(text);
+}
+
+function addOptionRandomOutcome(text, outcomes)
+{
+	activity.options[activity.options.length] = new optionRandomOutcome(text, outcomes);
+}
+
+function optionEndActivity(text)
+{
+	this.type = ActivityOptionType.EndActivity;
+	this.text = text;
+}
+
+function optionRandomOutcome(text, outcomes)
+{
+	this.type = ActivityOptionType.Random;
+	this.text = text;
+	this.outcomes = outcomes;
 }
 
 function textStyle(name, size, color)
@@ -1121,6 +1322,7 @@ function onKeyPress(event)
 }
 
 var enterKeyCode = 13;
+var tildeKeyCode = 96;
 
 function ascii(character)
 {
