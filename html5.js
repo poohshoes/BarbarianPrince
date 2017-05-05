@@ -1,5 +1,4 @@
 /* Task List
-- bonus merc encounter if north of the river.
 - start putting in the travel encounters
 - road travel and getting lostSave
 - river crossings, getting lost, and peing in partial positions.
@@ -10,6 +9,8 @@
 - 2 hex movement if mounted.  3 hex flying movement.
 - sleeping / nighttime animation
 - Replace this with a measurement of the height using the current font.
+- Surprise, Escape, and Routs.
+- put in the gold splitting when you get gold
 */
 
 function mapInfo()
@@ -32,6 +33,7 @@ var moveArrowFileName = "moveArrow.png";
 var tileHighlightGreyFileName = "tileHighlightGrey.png";
 var tileHighlightYellowFileName = "tileHighlightYellow.png";
 
+var day = 1;
 var food = 5;
 var gold = 0;
 
@@ -57,8 +59,18 @@ window.onload = initialize;
 window.addEventListener("keypress", onKeyPress, true);
 
 var lineHeight = 18;
-var todaysActionSelected = false;
-var todaysMercenaryCheck = false;
+
+var isSplittingGold = false;
+var goldToSplit = 0;
+Phase = {
+	playerAction: 0,
+    mercenaryCheck : 1,
+    hunting : 2,
+	starvation: 3,
+	dayEnd: 4
+}
+
+var phase = Phase.playerAction;
 
 var debugDisplay = false;
 var defaultTextStyle = new textStyle('Courier New', 14, 'black');
@@ -153,8 +165,7 @@ function resetGame()
         playerTilePosition.y = 0;
     }
    
-    todaysActionSelected = false;
-	todaysMercenaryCheck = false;
+    phase = Phase.playerAction;
 	setEvent('e', 001);
 }
 
@@ -236,6 +247,11 @@ function drawAndUpdate()
 		{
 			resetGame();
 		}
+	}
+	else if (isSplittingGold)
+	{
+		// Make a list of people who expect a split and allow toggling them on and off.
+		// The looters come and go as a group so you should have to select all or none of them?
 	}
     else if(combat.active)
     {
@@ -380,7 +396,9 @@ function drawAndUpdate()
 						     (unitIndex == 1 && attackTurn != playerAttackTurn) ||
 						     (unitIndex > 1 && attackTurn == overflowAttackTurn)))
 					   {
-						    var attackValue = unit.combatSkill - victim.combatSkill;
+						    var unitCombatSkill = unit.combatSkill - unit.starvation;
+						    var victimCombatSkill = victim.combatSkill - victim.starvation;
+						    var attackValue = unitCombatSkill - victimCombatSkill;
 						    // +2 Target of strike has wounds equalling half or more his endurance
 							if (victim.currentEndurance <= (victim.maxEndurance / 2))
 							{
@@ -408,8 +426,6 @@ function drawAndUpdate()
 							}
 							
 							victim.currentEndurance -= wounds;
-							
-							// Todo(ian): Surprise, Escape, and Routs.
 					   }
 					}	
 				}
@@ -491,6 +507,21 @@ function drawAndUpdate()
 				{
 					processOption(option.outcomes);
 				}
+				else if (option.type == ActivityOptionType.Hire)
+				{
+					for (var hireIndex = 0; hireIndex < option.numToHire; hireIndex++)
+					{
+						var character = activity.characters[hireIndex];
+						gold -= character.dailyFee;
+						character.advancePay = true;
+						party[party.length] = character;
+					}
+					clearActivity();
+				}
+				else if (option.type == ActivityOptionType.Event)
+				{
+					setEvent(option.letter, option.number);
+				}
 			}
 		}
 		
@@ -499,19 +530,212 @@ function drawAndUpdate()
 			clearActivity();
 		}
     }
-    else if (todaysActionSelected)
+    else if (phase == Phase.mercenaryCheck)
 	{
-		if (!todaysMercenaryCheck &&
-			(playerTilePosition.y == 0 && playerTilePosition.x != 13) ||
+		if ((playerTilePosition.y == 0 && playerTilePosition.x != 13) ||
 			(playerTilePosition.y == 1 && (playerTilePosition.x == 2 || playerTilePosition.x == 4)))
 		{
-			todaysMercenaryCheck = true;
+			phase = phase.hunting;
 			setEvent('e', 2);
+		}
+	}
+	else if (phase == Phase.hunting)
+	{
+		if (isTown() || isCastle() || isTemple())
+		{
+			/*
+			Hunting is prohibited in any hex with a town, castle, or temple.
+			Purchased Meals (r215d): if you are in a town, castle, or village you can purchase food for each character in
+			your party. Normal cost is 1 gold piece per character for food that day. Animals cost 1 gold piece per day to
+			feed at the stables of the town/castle/village. If you don't purchase food, you must eat stores, as hunting is
+			prohibited in these hexes.
+			Food Stores (r215e): food units can be stored and transported (r206) by yourself, other characters, and/or
+			mounts. Food stores can be purchased in a town, castle or village for 1 gold piece per food unit, but only if you
+			spent the entire day in the hex. Each food unit is one (1), load to transport.
+			Animal Fodder (r215f): animals can graze and eat fodder for themselves in any terrain where hunting is
+			possible except swamps (i.e., in farmland, countryside, forest, or hills). No hunting, stores or purchases are
+			necessary. If you spend the entire day in a town, castle or temple hex you must stable your animals which cost
+			one (1) gold piece for food, unless you provide the stable with food stores (two units per animal) to feed them.
+			Note: the cost of food is separate from the cost of lodging. In towns, castles and temples you must also pay for
+			lodging; see r217.
+			
+			r217 Lodging in Towns, Castles and Temples
+			If your party finishes the day in a town, castle or temple hex, after eating you normally buy lodging for your
+			party. Each room costs one gold piece for the night. You and any priests, monks, magicians, wizards, or
+			witches in your party each require a single room. All other followers can share, two per room, if you wish.
+			Animals are placed in stables at one gold piece per mount.
+			If you decide to not purchase rooms (due to lack of funds, or a desire to save money), you must roll two dice for
+			each character in your party, and then subtract your wit & wiles from the result. If the total is "4" or more, the
+			character deserts - he refuses to serve such a penurious leader! If a mount is without stables, roll one die for
+			each mount, a 4 or higher means thieves steal the mount during the night, it is permanently lost.
+			*/
+			phase = Phase.starvation;
 		}
 		else
 		{
-			eveningUpkeep();
+			var tileType = terrain[playerTilePosition.x, playerTilePosition.y];
+			if (!(tileType == Terrain.farmland ||
+				tileType == Terrain.countryside ||
+				tileType == Terrain.forest ||
+				tileType == Terrain.hill ||
+				tileType == Terrain.swamp))
+			{
+				phase = Phase.starvation;
+			}
+			else
+			{
+				if (doButton(panel, 'Don\'t hunt'))
+				{
+					phase = Phase.starvation;
+				}
+				
+				if (doButton(panel, 'Hunt'))
+				{
+					// Todo(ian): Let the player select the hunter and assistants.
+					var hunter = party[0];
+					var huntCheckDice = d6() + d6();
+					var hunterCombatSkill = hunter.combatSkill - hunter.starvation;
+					var foodUnits = hunterCombatSkill + Math.floor(hunter.currentEndurance / 2) - huntCheckDice;
+					if (hunter.isGuide)
+					{
+						foodUnits++;
+					}
+					if (huntCheckDice == 12)
+					{
+						var wounds = d6();
+						hunter.currentEndurance -= wounds;
+					}
+					if (hunter.currentEndurance > 1)
+					{
+						// Todo: you can also get the food units if your hunting party had assistants.
+						food += foodUnits;
+					}
+					// Todo: If you rested in the hex today you can select assistant hunters, each adds +1 to the food units and an additional +1 if they are a guide.
+					
+					if (tileType == Terrain.farmland)
+					{
+						var check = d6();
+						if (check == 5)
+						{
+							setEvent('e', 17);
+						}
+						else if (check == 6)
+						{
+							setEvent('e', 50);// Todo: we are supposed to add 2 to the die roll in this event
+						}
+					}
+					
+					phase = Phase.starvation;
+				}
+			}
 		}
+		
+		phase = Phase.starvation;
+	}
+	else if (phase == Phase.starvation)
+	{
+		// Todo(ian): Ability to abandon party members / mounts at any time (except when they are about to divy up gold per gold sharing rules.)
+				
+		var tileType = terrain[playerTilePosition.x, playerTilePosition.y];
+		var requiredFood = 0;
+		for (var partyIndex = 0; partyIndex < party.length; partyIndex++)
+		{
+			requiredFood++;
+			var isFarmCountryForestOrHill =
+				tileType == Terrain.farmland ||
+				tileType == Terrain.countryside ||
+				tileType == Terrain.forest ||
+				tileType == Terrain.hill;
+			if (!isFarmCountryForestOrHill &&
+				party[partyIndex].mounted == true)
+			{
+				requiredFood += 2;
+			}
+		}
+		if (tileType == Terrain.desert && !isOasis())
+		{
+			requiredFood *= 2;
+		}
+		
+		var desertion = false;
+		var starvation = 0;
+		var actionSelected = false;
+		if (doButton(panel, 'Don\'t Eat'))
+		{
+			actionSelected = true;
+			desertion = true;
+			starvation = 1;
+		}
+		if (0 < food && food < requiredFood &&
+			doButton(panel, 'Partition remaining food'))
+		{
+			actionSelected = true;
+			desertion = true;
+			food = 0;
+		}
+		if (food >= requiredFood && doButton(panel, 'Eat'))
+		{
+			actionSelected = true;
+			food -= requiredFood;
+			starvation = -1;
+		}
+		if (food >= 2 * requiredFood && doButtion(panel, 'Double Meal'))
+		{
+			actionSelected = true;
+			food -= 2 * requiredFood;
+			starvation = -2;
+		}
+		
+		if (actionSelected)
+		{
+			for (var partyIndex = party.length - 1; partyIndex > 0; partyIndex--)
+			{
+				var partyMember = party[partyIndex];
+				partyMember.starvation += starvation;
+				if (partyMember.starvation < 0)
+				{
+					partyMember.starvation = 0;
+				}
+				if (desertion && partyIndex != 0)
+				{
+					var desertionCheck = d6() + d6() - party[0].witAndWiles;
+					if (desertionCheck >= 4)
+					{
+						party.splice(partyIndex, 1);
+					}
+				}
+			}
+	
+			phase = Phase.dayEnd;	
+		}
+		
+		/*		
+		Character Starvation (r216b): if a character goes, without food for a day, on the following day his ability to carry loads (r206) is halved, with fractions rounded down, and his combat skill is reduced by one. If he goes without food again, load carrying and combat skill is reduced again. When food is available and eaten again,
+		each day's normal meal also eliminates the effect of one day of starvation. A double meal can be eaten to eliminate the effect of two days of starvation, but triple or larger meals have no additional effect. A character cannot die of starvation within the scope of the game, but after a certain point progressive starvation makes him nearly worthless!
+		Mount Starvation; if animals (mounts) in the party go without food, their carrying capacity is halved for each day of starvation, just like characters. When carrying capacity reaches zero, the mount dies. If a winged mount goes without food, it is unable to fly. Unlike characters, as soon as a mount gets a normal meal, it recovers from all starvation effects. */
+		phase = Phase.dayEnd
+	}
+	else if (phase == Phase.dayEnd)
+	{		
+		addDebugText("End Of Day");
+		phase = Phase.playerAction;
+		
+		var partySalary = 0;
+		for (var partyIndex = 1; partyIndex < party.length; partyIndex++)
+		{
+			var partyMember = party[partyIndex];
+			if (partyMember.advancePay)
+			{
+				partyMember.advancePay = false;
+			}
+			else
+			{
+				partySalary += partyMember.dailyFee;
+			}
+		}
+		
+		gold -= partySalary;		
+		day++;
 	}
     else 
 	{
@@ -605,7 +829,7 @@ function drawAndUpdate()
 						
 						if(mouseClicked)
 						{
-							todaysActionSelected = true;
+							phase = Phase.mercenaryCheck;
 							
 							// 0 - Farmland
 							// 1 - Countryside
@@ -734,20 +958,6 @@ function processOption(optionMatrix)
 	}
 }
 
-function eveningUpkeep()
-{
-	todaysActionSelected = false;
-	todaysMercenaryCheck = false;
-    addDebugText("End Of Day");
-    // TODO(ian): Advance day counter (70 days total)
-    
-    // Todo(ian): You must eat for the day (r215).
-    if(food > 0)
-    {
-        food--;
-    }
-}
-    
 function getCharacter(name, combatSkill, endurance, wealth)
 {
     var result = {};
@@ -756,6 +966,9 @@ function getCharacter(name, combatSkill, endurance, wealth)
     result.currentEndurance = endurance;
 	result.maxEndurance = endurance;
     result.wealth = wealth;
+	result.dailyFee = 0;
+	result.advancePay = false;
+	result.sharePay = false;
     return result;
 }
 
@@ -1065,11 +1278,37 @@ function setEvent(letter, number)
             activity.text[activity.text.length] = "Characters lose interest in your party, encounter and event ends now.";
 			activity.canEnd = true;
         }
+		else if (number == 330)
+		{
+			/*r330 Battle Reference
+			You are forced to fight with the characters encountered, roll two dice and go to the appropriate section: 2(or
+			less)-r310; 3-r309; 4-r308; 5-r307; 6-r306; 7-r305; 8-r304;9-r303; 10-r302; 11-r301; 12(or more)-r300.*/
+			var check = d6() + d6() - 2;
+			var outcomes = [310, 309, 308, 307, 306, 305, 304, 303, 302, 301, 300];
+			setEvent('r', outcomes[check]);
+		}
 		else if (number == 336)
 		{
 			/*r336 Plead Comrades
 			You try to talk the character(s) into joining your party, as they seem sympathetic and interested. Roll one die, if
 			your wit & wiles equals or exceeds the roll, they will join as followers; otherwise they leave and the event ends.*/
+			activity.text[activity.text.length] = "You try to talk the character(s) into joining your party, as they seem sympathetic and interested.";
+			var check = d6();
+			if (party[0].witAndWiles >= check)
+			{
+				activity.text[activity.text.length] = "Wit & Wiles check passed, the characters join your party.";
+				activity.canEnd = true;
+				for (var characterIndex = 0; characterIndex < activity.characters.length; characterIndex++)
+				{
+					party[party.length] = activity.characters[characterIndex];
+				}
+			}
+			else
+			{
+				activity.text[activity.text.length] = "Wit & Wiles check failed, the characters leave.";
+				activity.text[activity.text.length] = "Characters lose interest in your party, encounter and event ends now.";
+				activity.canEnd = true;
+			}
         }
 		else if (number == 337)
 		{
@@ -1077,7 +1316,27 @@ function setEvent(letter, number)
 			The character(s) encountered look unsavory, but willing to talk - you try to convince them to join your party. Roll
 			one die, if your wit & wiles exceed the roll, they join as followers. Otherwise, roll one die again: 1-r325; 2-r330;
 			3-r340; 4,5-r341; 6-r342.*/
-			
+			activity.text[activity.text.length] = "The character(s) encountered look unsavory, but willing to talk - you try to convince them to join your party.";
+			var check = d6();
+			if (party[0].witAndWiles > check)
+			{
+				activity.text[activity.text.length] = "Wit & Wiles check passed, the characters join your party.";
+				activity.canEnd = true;
+				for (var characterIndex = 0; characterIndex < activity.characters.length; characterIndex++)
+				{
+					party[party.length] = activity.characters[characterIndex];
+				}
+			}
+			else
+			{
+				activity.text[activity.text.length] = "Wit & Wiles check failed.";
+				var randomIndex = d6() - 1;
+				var options = [325, 330, 340, 341, 341, 342];
+				setEvent('r', options[randomIndex]);
+			}
+		}
+		else if (number == 338)
+		{			
 			/*r338 Convince Hirelings
 			Character(s) encountered look dubiously at you, but you try to convince them to join your party as henchmen.
 			Roll one die; if your wit & wiles equals or exceeds the die roll, they will join your party as henchmen. You must
@@ -1086,6 +1345,25 @@ function setEvent(letter, number)
 			can hire some instead of all if you desire. Those who are not hired, or if you fail to convince them to join will
 			pass by, ending the event.*/
 			
+			activity.text[activity.text.length] = "Character(s) encountered look dubiously at you, but you try to convince them to join your party as henchmen.";
+			var witCheck = d6();
+			if (party[0].witAndWiles >= witCheck)
+			{
+				var hirePrice = 1;
+				if (party[0].witAndWiles == witCheck)
+				{
+					hirePrice = 2;
+				}
+				hireOption(hirePrice);
+			}
+			else
+			{
+				activity.text[activity.text.length] = "Wit & Wiles check failed, the characters leave.";
+				activity.canEnd = true;
+			}
+		}
+		else if (number == 339)
+		{
 			/*r339 Convince Hirelings
 			Character(s) encountered look askance at you, and will pass you by (event ends) unless you stop to talk.
 			If you stop to talk, you decide you should convince them to join your party as henchmen. Roll one die; if your wit
@@ -1093,18 +1371,68 @@ function setEvent(letter, number)
 			some instead of all if you desire.
 			If you stopped to talk, but failed to convince them to join as hirelings, roll one die to determine their attitude:
 			1,2,3-r325; 4,5,6-r330.*/
-			
+			activity.text[activity.text.length] = 'Character(s) encountered look askance at you, and will pass you by (event ends) unless you stop to talk.';
+			addOptionEndActivity('Don\'t stop');
+			addOptionEvent('Stop', 'r', 3391);
+		}
+		else if (number == 3391)
+		{
+			var check = d6();
+			if (party[0].witAndWiles > check)
+			{
+				hireOption(2);
+			}
+			else
+			{
+				var attitudeCheck = d6() - 1;
+				var outcomes = [325, 325, 325, 330, 330, 330];
+				setEvent('r', outcomes[attitudeCheck]);				
+			}
+		}
+		else if (number == 340)
+		{
 			/*r340 Looter
-			Character(s) encountered look like they are in need of money. You can let them pass (encounter ends) or try to
-			convince them to join you.
-			If you try to convince them, roll one die. If your wit & wiles equals or exceeds the die roll, they will join your
-			party. They will remain as long as they get an equal share in any new gold you acquire (i.e., each gets as least
-			as much as you). If you deny them their share, it is ^s if you failed to convince them to join, see below.
-			If you fail to convince them to join (or later deny them an equal share in gold) they may become hostile, roll one
+			Character(s) encountered look like they are in need of money. You can let them pass (encounter ends) or try to convince them to join you.  If you try to convince them, roll one die. If your wit & wiles equals or exceeds the die roll, they will join your party. They will remain as long as they get an equal share in any new gold you acquire (i.e., each gets as least as much as you). If you deny them their share, it is ^s if you failed to convince them to join, see below. If you fail to convince them to join (or later deny them an equal share in gold) they may become hostile, roll one
 			die:
 			1,2 They attack you personally in combat (r220), and have the first strike.
 			3,4 They attack your party in combat (r220); see r330 for situation.
 			5,6 They depart angry, but without fighting, event ends.*/
+			activity.text[activity.text.length] = 'Character(s) encountered look like they are in need of money. You can let them pass (encounter ends) or try to convince them to join you.  If you try to convince them, roll one die. If your wit & wiles equals or exceeds the die roll, they will join your party. They will remain as long as they get an equal share in any new gold you acquire (i.e., each gets as least as much as you). If you deny them their share they may become hostile. If you fail to convince them to join (or later deny them an equal share in gold) they may become hostile.';
+			addOptionEndActivity('Let them pass');
+			addOptionEvent('Try to hire', 'r', 3401);
+		}
+		else if (number == 3401)
+		{
+			var witCheck = d6();
+			if (party[0].witAndWiles >= witCheck)
+			{
+				for (var characterIndex = 0; characterIndex < activity.characters.length; chracaterIndex++)
+				{
+					var charachter = activity.characters[characterIndex];
+					character.sharePay = true;
+					party[party.length] = character;
+				}
+			}
+			else
+			{
+				move this to a function and push the characters out of the party into the combat group when calling it for not getting an equal share
+				var check = d6();
+				if (check <= 2)
+				{
+					// Todo(ian): Implement them attacking you personally.
+					// 1,2 They attack you personally in combat (r220), and have the first strike.
+					setEvent('r', 308);
+				}
+				else if (check <= 4)
+				{
+					setEvent('r', 330);
+				}
+				else
+				{
+					activity.text[activity.text.length] = 'They depart angry, ut without fighting.';
+					activity.canEnd = true;
+				}
+			}
 			
 			/*r341 Conversation
 			In an extended period of talking, you gradually discover the interests and attitudes of the character(s) you
@@ -1255,33 +1583,66 @@ function setEvent(letter, number)
     }
 }
 
-ActivityOptionType = {
-    Random : 0,
-    EndActivity : 1
+function hireOption(var hirePrice)
+{
+	activity.text[activity.text.length] = "The character(s) agree to join your party at a price of " + hirePrice + " gold per day each.  Todays fee must be paid immediately.  How many would you like to hire?";
+	
+	addOptionEndActivity('None');
+	for (var characterIndex = 1; characterIndex <= activity.characters.length; characterIndex++)
+	{
+		var character = activity.characters[characterIndex];
+		character.dailyFee = hirePrice;
+		var totalImmediatePrice = hirePrice * characterIndex;
+		if (totalImmediatePrice <= gold)
+		{
+			addOptionHire(characterIndex);
+		}
+	}
 }
 
-function addOptionEndActivity(text, outcomes)
+ActivityOptionType = {
+    Random : 0,
+    EndActivity : 1,
+	Hire: 2,
+	Event: 3
+}
+
+function addOptionEndActivity(text)
 {
-	activity.options[activity.options.length] = new optionEndActivity(text);
+	var option = {};
+	option.type = ActivityOptionType.EndActivity;
+	option.text = text;
+	activity.options[activity.options.length] = option;
 }
 
 function addOptionRandomOutcome(text, outcomes)
 {
-	activity.options[activity.options.length] = new optionRandomOutcome(text, outcomes);
+	var option = {};
+	option.type = ActivityOptionType.Random;
+	option.text = text;
+	option.outcomes = outcomes;
+	activity.options[activity.options.length] = option;
 }
 
-function optionEndActivity(text)
+function addOptionHire(numToHire)
 {
-	this.type = ActivityOptionType.EndActivity;
-	this.text = text;
+	var option = {};
+	option.type = ActivityOptionType.Hire;
+	option.numToHire  = numToHire;
+	activity.options[activity.options.length] = option;
 }
 
-function optionRandomOutcome(text, outcomes)
+function addOptionEvent(text, letter, number)
 {
-	this.type = ActivityOptionType.Random;
-	this.text = text;
-	this.outcomes = outcomes;
+	var option = {}
+	option.type = ActivityOptionType.Event;
+	option.text = text;
+	option.letter = letter;
+	option.number = number;
+	activity.options[activity.options.length] = option;
 }
+
+
 
 function textStyle(name, size, color)
 {
@@ -1485,6 +1846,78 @@ function angleToV2(a)
 //
 // == TABLES
 //
+
+function isOasis()
+{
+	// Note(ian): Add one so we can use the positions as they appear on the map.
+	var x = playerTilePosition.x + 1;
+	var y = playerTilePosition.y + 1;
+	var result = 
+		(x == 2  && y == 6) ||
+		(x == 16 && y == 7) ||
+		(x == 14 && y == 9) ||
+		(x == 16 && y == 9);
+	return result;
+}
+
+function isTown()
+{
+	// Note(ian): Add one so we can use the positions as they appear on the map.
+	var x = playerTilePosition.x + 1;
+	var y = playerTilePosition.y + 1;
+	var result = 
+		(x ==  1 && y == 1) ||
+		(x == 15 && y == 1) ||
+		(x == 10 && y == 4) ||
+		(x ==  1 && y == 9) ||
+		(x == 10 && y == 9) ||
+		(x == 14 && y == 15) ||
+		(x ==  2 && y == 16) ||
+		(x ==  9 && y == 16) ||
+		(x ==  4 && y == 19) ||
+		(x ==  7 && y == 19) ||
+		(x == 17 && y == 20) ||
+		(x ==  4 && y == 22);
+	return result;
+}
+
+function isTemple()
+{
+	// Note(ian): Add one so we can use the positions as they appear on the map.
+	var x = playerTilePosition.x + 1;
+	var y = playerTilePosition.y + 1;
+	var result = 
+		(x == 18 && y == 5) ||
+		(x == 13 && y == 9) ||
+		(x == 7 && y == 11) ||
+		(x == 20 && y == 18) ||
+		(x == 10 && y == 21);
+	return result;
+}
+
+function isRuin()
+{
+	// Note(ian): Add one so we can use the positions as they appear on the map.
+	var x = playerTilePosition.x + 1;
+	var y = playerTilePosition.y + 1;
+	var result = 
+		(x ==  9 && y == 1) ||
+		(x ==  2 && y == 6) ||
+		(x == 20 && y == 9);
+	return result;
+}
+
+function isCastle()
+{
+	// Note(ian): Add one so we can use the positions as they appear on the map.
+	var x = playerTilePosition.x + 1;
+	var y = playerTilePosition.y + 1;
+	var result = 
+		(x == 12 && y == 12) ||
+		(x ==  3 && y == 23) ||
+		(x == 19 && y == 23);
+	return result;
+}
 
 // Note(ian): This is supposed to have a -1 entry so we cheat and push everything up by one.
 // -1,3,5,8,11 One wound
